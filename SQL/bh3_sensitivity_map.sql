@@ -310,7 +310,7 @@ BEGIN
 
 		RAISE INFO 'Populating table %.%', output_schema, output_table;
 
-		/* sensitivity_map = species_sensitivity_mode_final + species_sensitivity_all_areas (= species_sensitivity_max + habitat_sensitivity_final) */
+		/* sensitivity_map = habitat_sensitivity_final + species_sensitivity_all_areas */
 		EXECUTE format('WITH cte_union AS '
 					   '('
 						   'SELECT gid'

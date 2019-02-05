@@ -6,7 +6,8 @@ CREATE OR REPLACE FUNCTION public.bh3_get_pressure_csquares(
 	boundary_filter integer,
 	pressure_schema name,
 	date_start timestamp without time zone,
-	date_end timestamp without time zone DEFAULT now(),
+	date_end timestamp without time zone DEFAULT now(
+	),
 	sar_surface_column name DEFAULT 'sar_surface'::name,
 	sar_subsurface_column name DEFAULT 'sar_subsurface'::name,
 	boundary_schema name DEFAULT 'static'::name,
@@ -14,8 +15,8 @@ CREATE OR REPLACE FUNCTION public.bh3_get_pressure_csquares(
 	boundary_filter_negate boolean DEFAULT false,
 	output_srid integer DEFAULT 4326)
     RETURNS TABLE(
-		gid bigint, 
-		c_square character varying, 
+		gid bigint,
+		c_square character varying,
 		n bigint,
 		sar_surface_min double precision,
 		sar_surface_max double precision,
@@ -144,8 +145,8 @@ BEGIN
 									  ',max(sar_surface_cat) - min(sar_surface_cat) AS sar_surface_cat_range'
 									  ',(max(sar_surface_cat) - min(sar_surface_cat) >= 4) AS sar_surface_variable'
 									  ',CASE '
-										  'WHEN max(sar_surface_cat) - min(sar_surface_cat) >= 4 THEN avg(sar_surface) '
-										  'ELSE max(sar_surface) '
+										  'WHEN max(sar_surface_cat) - min(sar_surface_cat) >= 4 THEN max(sar_surface) '
+										  'ELSE avg(sar_surface) '
 									  'END AS sar_surface'
 									  ',min(sar_subsurface) AS sar_subsurface_min'
 									  ',max(sar_subsurface) AS sar_subsurface_max'
@@ -155,8 +156,8 @@ BEGIN
 									  ',max(sar_subsurface_cat) - min(sar_subsurface_cat) AS sar_subsurface_cat_range'
 									  ',(max(sar_subsurface_cat) - min(sar_subsurface_cat) >= 4) AS sar_subsurface_variable'
 									  ',CASE '
-										  'WHEN max(sar_subsurface_cat) - min(sar_subsurface_cat) >= 4 THEN avg(sar_subsurface) '
-										  'ELSE max(sar_subsurface) '
+										  'WHEN max(sar_subsurface_cat) - min(sar_subsurface_cat) >= 4 THEN max(sar_subsurface) '
+										  'ELSE avg(sar_subsurface) '
 									  'END AS sar_subsurface'
 									  ',(ST_Accum(the_geom))[1] AS the_geom '
 								  'FROM cte_union u '

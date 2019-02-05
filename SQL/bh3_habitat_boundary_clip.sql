@@ -1,3 +1,7 @@
+-- FUNCTION: public.bh3_habitat_boundary_clip(integer, character varying[], name, name, name, name, name, name, name, name, boolean, boolean, boolean, boolean)
+
+-- DROP FUNCTION public.bh3_habitat_boundary_clip(integer, character varying[], name, name, name, name, name, name, name, name, boolean, boolean, boolean, boolean);
+
 CREATE OR REPLACE FUNCTION public.bh3_habitat_boundary_clip(
 	boundary_filter integer,
 	habitat_types_filter character varying[],
@@ -14,9 +18,10 @@ CREATE OR REPLACE FUNCTION public.bh3_habitat_boundary_clip(
 	exclude_empty_mismatched_eunis_l3 boolean DEFAULT true,
 	remove_overlaps boolean DEFAULT false,
 	OUT success boolean,
-	OUT exc_text character varying, 
-	OUT	exc_detail character varying, 
-	OUT exc_hint character varying) 
+	OUT exc_text character varying,
+	OUT exc_detail character varying,
+	OUT exc_hint character varying)
+    RETURNS record
     LANGUAGE 'plpgsql'
 
     COST 100
@@ -101,6 +106,17 @@ BEGIN
 
 		start_time := clock_timestamp();
 
+		EXECUTE format('UPDATE %1$I '
+					   'SET the_geom = ST_Buffer(the_geom,0) '
+					   'WHERE NOT ST_IsValid(the_geom) OR NOT ST_IsSimple(the_geom)',
+					   temp_table_boundary_subdivide);
+
+		GET DIAGNOSTICS rows_affected = ROW_COUNT;
+		RAISE INFO 'Repaired % geometries in temporary table %: %', 
+			rows_affected, temp_table_habitat_boundary_intersect, (clock_timestamp() - start_time);
+
+		start_time := clock_timestamp();
+
 		EXECUTE format('ALTER TABLE %1$I ADD CONSTRAINT %1$s_pkey PRIMARY KEY(gid)', 
 					   temp_table_boundary_subdivide);
 		EXECUTE format('CREATE UNIQUE INDEX idx_%1$s_gid ON %1$I USING BTREE(gid)', 
@@ -172,7 +188,8 @@ BEGIN
 						   ',hab.hab_type'
 						   ',hab.eunis_l3 '
 					   'FROM %2$I hab '
-					   'WHERE NOT ST_IsEmpty(the_geom) '
+					   'WHERE the_geom IS NOT NULL '
+						   'AND NOT ST_IsEmpty(the_geom) '
 						   'AND ST_GeometryType(the_geom) ~* $1 '
 					   'GROUP BY hab.gid'
 						   ',hab.hab_type'
@@ -300,3 +317,6 @@ BEGIN
 	END;
 END;
 $BODY$;
+
+ALTER FUNCTION public.bh3_habitat_boundary_clip(integer, character varying[], name, name, name, name, name, name, name, name, boolean, boolean, boolean, boolean)
+    OWNER TO postgres;

@@ -10,10 +10,7 @@ CREATE OR REPLACE FUNCTION public.bh3_create_fishnet(
 	origin_x double precision DEFAULT 0,
 	origin_y double precision DEFAULT 0,
 	srid integer DEFAULT 4326)
-    RETURNS TABLE(
-		"row" integer,
-		col integer,
-		geom geometry) 
+    RETURNS TABLE("row" integer, col integer, geom geometry) 
     LANGUAGE 'plpgsql'
 
     COST 100

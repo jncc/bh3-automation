@@ -10,7 +10,11 @@ CREATE OR REPLACE FUNCTION public.bh3_create_csquares(
 	boundary_filter_negate boolean DEFAULT false,
 	cell_size_degrees numeric DEFAULT 0.05,
 	output_srid integer DEFAULT 4326)
-    RETURNS TABLE(gid bigint, "row" integer, col integer, the_geom geometry) 
+    RETURNS TABLE(
+		gid bigint,
+		"row" integer,
+		col integer,
+		the_geom geometry) 
     LANGUAGE 'plpgsql'
 
     COST 100

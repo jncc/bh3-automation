@@ -43,7 +43,7 @@ BEGIN
 		CALL bh3_drop_temp_table(temp_table_habitat_overlaps_removed);
 		CALL bh3_drop_temp_table(temp_table_habitat_overlaps_replaced);
 
-		RAISE INFO 'Removed any outputs of previous runs: %', (clock_timestamp() - start_time);
+		RAISE INFO 'bh3_habitat_remove_overlaps: Removed any outputs of previous runs: %', (clock_timestamp() - start_time);
 
 		start_time := clock_timestamp();
 
@@ -74,7 +74,7 @@ BEGIN
 					   temp_table_habitat_self_join, habitat_sensitivity_schema, habitat_sensitivity_table);
 		
 		GET DIAGNOSTICS rows_affected = ROW_COUNT;
-		RAISE INFO 'Inserted % rows of self joined %.% into temporary table %: %', 
+		RAISE INFO 'bh3_habitat_remove_overlaps: Inserted % rows of self joined %.% into temporary table %: %', 
 			rows_affected, habitat_sensitivity_schema, habitat_sensitivity_table, temp_table_habitat_self_join, 
 			(clock_timestamp() - start_time);
 
@@ -132,24 +132,17 @@ BEGIN
 		USING 'Polygon';
 		
 		GET DIAGNOSTICS rows_affected = ROW_COUNT;
-		RAISE INFO 'Inserted % split rows from temporary table % into temporary table %: %', 
+		RAISE INFO 'bh3_habitat_remove_overlaps: Inserted % split rows from temporary table % into temporary table %: %', 
 			rows_affected, temp_table_habitat_self_join, temp_table_habitat_self_join_union, 
 			(clock_timestamp() - start_time);
 
 		start_time := clock_timestamp();
 		
 		/* repair any invalid geometries */
-		EXECUTE format('UPDATE %1$I '
-					   'SET the_geom = ST_Multi(ST_Buffer('
-						   'CASE '
-							   'WHEN ST_IsCollection(the_geom) THEN ST_CollectionExtract(the_geom, 3) '
-							   'ELSE the_geom '
-						   'END, 0)) '
-					   'WHERE NOT ST_IsValid(the_geom) OR NOT ST_IsSimple(the_geom) OR ST_IsCollection(the_geom)',
-					   temp_table_habitat_self_join_union);
+		CALL bh3_repair_geometries(NULL, temp_table_habitat_self_join_union);
 
 		GET DIAGNOSTICS rows_affected = ROW_COUNT;
-		RAISE INFO 'Repaired % geometries in temporary table %: %', 
+		RAISE INFO 'bh3_habitat_remove_overlaps: Repaired % geometries in temporary table %: %', 
 			rows_affected, temp_table_habitat_self_join_union, (clock_timestamp() - start_time);
 
 		start_time := clock_timestamp();
@@ -199,22 +192,16 @@ BEGIN
 					   temp_table_habitat_unique_overlaps, temp_table_habitat_self_join_union);
 		
 		GET DIAGNOSTICS rows_affected = ROW_COUNT;
-		RAISE INFO 'Inserted % unique overlap rows ranked by sensitivity and confidence into temporary table %: %', 
+		RAISE INFO 'bh3_habitat_remove_overlaps: Inserted % unique overlap rows ranked by sensitivity and confidence into temporary table %: %', 
 			rows_affected, temp_table_habitat_unique_overlaps, (clock_timestamp() - start_time);
 
 		start_time := clock_timestamp();
-					   
-		EXECUTE format('UPDATE %1$I '
-					   'SET the_geom = ST_Multi(ST_Buffer('
-						   'CASE '
-							   'WHEN ST_IsCollection(the_geom) THEN ST_CollectionExtract(the_geom, 3) '
-							   'ELSE the_geom '
-						   'END, 0)) '
-					   'WHERE NOT ST_IsValid(the_geom) OR NOT ST_IsSimple(the_geom) OR ST_IsCollection(the_geom)',
-					   temp_table_habitat_unique_overlaps);
+
+		/* repair any invalid geometries */
+		CALL bh3_repair_geometries(NULL, temp_table_habitat_unique_overlaps);
 
 		GET DIAGNOSTICS rows_affected = ROW_COUNT;
-		RAISE INFO 'Repaired % geometries in temporary table %: %', 
+		RAISE INFO 'bh3_habitat_remove_overlaps: Repaired % geometries in temporary table %: %', 
 			rows_affected, temp_table_habitat_unique_overlaps, (clock_timestamp() - start_time);
 
 		start_time := clock_timestamp();
@@ -223,7 +210,7 @@ BEGIN
 		EXECUTE format('CREATE INDEX sidx_%1$s_the_geom ON %1$I USING GIST(the_geom)', 
 					   temp_table_habitat_unique_overlaps);
 
-		RAISE INFO 'Created spatial index on temporary table %: %', 
+		RAISE INFO 'bh3_habitat_remove_overlaps: Created spatial index on temporary table %: %', 
 			temp_table_habitat_unique_overlaps, (clock_timestamp() - start_time);
 
 		start_time := clock_timestamp();
@@ -276,23 +263,16 @@ BEGIN
 		USING 'Polygon';
 		
 		GET DIAGNOSTICS rows_affected = ROW_COUNT;
-		RAISE INFO 'Inserted % rows with overlaps removed into temporary table %: %', 
+		RAISE INFO 'bh3_habitat_remove_overlaps: Inserted % rows with overlaps removed into temporary table %: %', 
 			rows_affected, temp_table_habitat_overlaps_removed, (clock_timestamp() - start_time);
 
 		start_time := clock_timestamp();
 
 		/* repair any invalid geometries */
-		EXECUTE format('UPDATE %1$I '
-					   'SET the_geom = ST_Multi(ST_Buffer('
-						   'CASE '
-							   'WHEN ST_IsCollection(the_geom) THEN ST_CollectionExtract(the_geom, 3) '
-							   'ELSE the_geom '
-						   'END, 0)) '
-					   'WHERE NOT ST_IsValid(the_geom) OR NOT ST_IsSimple(the_geom) OR ST_IsCollection(the_geom)',
-					   temp_table_habitat_overlaps_removed);
+		CALL bh3_repair_geometries(NULL, temp_table_habitat_overlaps_removed);
 
 		GET DIAGNOSTICS rows_affected = ROW_COUNT;
-		RAISE INFO 'Repaired % geometries in temporary table %: %', 
+		RAISE INFO 'bh3_habitat_remove_overlaps: Repaired % geometries in temporary table %: %', 
 			rows_affected, temp_table_habitat_overlaps_removed, (clock_timestamp() - start_time);
 
 		start_time := clock_timestamp();
@@ -301,7 +281,7 @@ BEGIN
 		EXECUTE format('CREATE INDEX sidx_%1$s_the_geom ON %1$I USING GIST(the_geom)',
 					   temp_table_habitat_overlaps_removed);
 
-		RAISE INFO 'Created spatial index on temporary table %: %', 
+		RAISE INFO 'bh3_habitat_remove_overlaps: Created spatial index on temporary table %: %', 
 			temp_table_habitat_overlaps_removed, (clock_timestamp() - start_time);
 
 		start_time := clock_timestamp();
@@ -345,7 +325,7 @@ BEGIN
 					   temp_table_habitat_unique_overlaps);
 					   
 		GET DIAGNOSTICS rows_affected = ROW_COUNT;
-		RAISE INFO 'Inserted % rows into temporary table % from temporary tables % and %: %', 
+		RAISE INFO 'bh3_habitat_remove_overlaps: Inserted % rows into temporary table % from temporary tables % and %: %', 
 					   rows_affected, temp_table_habitat_overlaps_replaced, temp_table_habitat_overlaps_removed, 
 					   temp_table_habitat_unique_overlaps, (clock_timestamp() - start_time);
 
@@ -354,7 +334,7 @@ BEGIN
 		/* empty input table */
 		EXECUTE format('TRUNCATE ONLY %1$I.%2$I', habitat_sensitivity_schema, habitat_sensitivity_table);
 
-		RAISE INFO 'Emptied input table %.%: %', 
+		RAISE INFO 'bh3_habitat_remove_overlaps: Emptied input table %.%: %', 
 			habitat_sensitivity_schema, habitat_sensitivity_table, (clock_timestamp() - start_time);
 
 		start_time := clock_timestamp();
@@ -384,7 +364,7 @@ BEGIN
 					   temp_table_habitat_overlaps_replaced);
 
 		GET DIAGNOSTICS rows_affected = ROW_COUNT;
-		RAISE INFO 'Copied % rows from temporary table % into input table %.%: %', 
+		RAISE INFO 'bh3_habitat_remove_overlaps: Copied % rows from temporary table % into input table %.%: %', 
 			rows_affected, temp_table_habitat_overlaps_replaced, habitat_sensitivity_schema, habitat_sensitivity_table, 
 			(clock_timestamp() - start_time);
 
@@ -397,13 +377,14 @@ BEGIN
 		CALL bh3_drop_temp_table(temp_table_habitat_overlaps_removed);
 		CALL bh3_drop_temp_table(temp_table_habitat_overlaps_replaced);
 
-		RAISE INFO 'Dropped temporary tables: %', (clock_timestamp() - start_time);
+		RAISE INFO 'bh3_habitat_remove_overlaps: Dropped temporary tables: %', (clock_timestamp() - start_time);
 
 		success := true;
 	EXCEPTION WHEN OTHERS THEN
 		GET STACKED DIAGNOSTICS exc_text = MESSAGE_TEXT,
 								  exc_detail = PG_EXCEPTION_DETAIL,
 								  exc_hint = PG_EXCEPTION_HINT;
+		RAISE INFO 'bh3_habitat_remove_overlaps: Error message: %. Detail: %. Hint: %', exc_text, exc_detail, exc_hint;
 	END;
 END;
 $BODY$;

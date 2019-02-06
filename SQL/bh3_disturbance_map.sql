@@ -193,13 +193,15 @@ BEGIN
 		EXECUTE sqlstmt;
 
 		/* loop over cursor, intersecting sensitivity polygons with pressure grid squares (using fast ST_ClipByBox2D function) */
+		rec_count := 0;
+		
 		LOOP
 			BEGIN
 				FETCH cand_cursor INTO cand_row;
 				EXIT WHEN NOT FOUND;
 
 				rec_count := rec_count + 1;
-				RAISE INFO 'Looping over cursor. Row: %. Runtime: %', rec_count, (clock_timestamp() - start_time);
+				RAISE INFO 'bh3_disturbance_map: Looping over cursor. Row: %. Runtime: %', rec_count, (clock_timestamp() - start_time);
 
 				geom := ST_Multi(ST_ClipByBox2D(cand_row.geom_sen, cand_row.geom_prs));
 				/* repair clipped geometry if necessary */
@@ -245,9 +247,7 @@ BEGIN
 				error_texts := error_texts || exc_text;
 				error_details := error_details || exc_detail;
 				error_hints := error_hints || exc_hint;
-				RAISE INFO 'Error text: %', exc_text;
-				RAISE INFO 'Error detail: %', exc_detail;
-				RAISE INFO 'Error hint: %', exc_hint;
+				RAISE INFO 'Error. Text: %. Detail: %. Hint: %.', exc_text, exc_detail, exc_hint;
 			END;
 		END LOOP;
 
@@ -273,9 +273,7 @@ BEGIN
 		GET STACKED DIAGNOSTICS exc_text = MESSAGE_TEXT,
 								  exc_detail = PG_EXCEPTION_DETAIL,
 								  exc_hint = PG_EXCEPTION_HINT;
-		RAISE INFO 'Error text: %', exc_text;
-		RAISE INFO 'Error detail: %', exc_detail;
-		RAISE INFO 'Error hint: %', exc_hint;
+		RAISE INFO 'Error. Text: %. Detail: %. Hint: %.', exc_text, exc_detail, exc_hint;
 	END;
 
 	RETURN;

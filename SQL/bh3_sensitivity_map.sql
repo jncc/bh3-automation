@@ -34,11 +34,11 @@ BEGIN
 		habitat_sensitivity_final_table := 'habitat_sensitivity_final';
 
 		/* drop any previous temp tables left behind */
-		RAISE INFO 'Dropping temporary table %', species_sensitivity_mode_final_table;
+		RAISE INFO 'bh3_sensitivity_map: Dropping temporary table %', species_sensitivity_mode_final_table;
 		CALL bh3_drop_temp_table(species_sensitivity_mode_final_table);
-		RAISE INFO 'Dropping temporary table %', species_sensitivity_all_areas_table;
+		RAISE INFO 'bh3_sensitivity_map: Dropping temporary table %', species_sensitivity_all_areas_table;
 		CALL bh3_drop_temp_table(species_sensitivity_all_areas_table);
-		RAISE INFO 'Dropping temporary table %', habitat_sensitivity_final_table;
+		RAISE INFO 'bh3_sensitivity_map: Dropping temporary table %', habitat_sensitivity_final_table;
 		CALL bh3_drop_temp_table(habitat_sensitivity_final_table);
 
 		/* clean up any previous output left behind */
@@ -52,7 +52,7 @@ BEGIN
 			EXECUTE 'SELECT DropGeometryTable($1::text,$2::text)' USING output_schema, tn;
 		END LOOP;
 
-		RAISE INFO 'Creating temporary table %', species_sensitivity_mode_final_table;
+		RAISE INFO 'bh3_sensitivity_map: Creating temporary table %', species_sensitivity_mode_final_table;
 
 		/* species_sensitivity_mode_final = species_sensitivity_mode - species_sensitivity_maximum */
 		EXECUTE format('CREATE TEMP TABLE %1$I AS '
@@ -151,7 +151,7 @@ BEGIN
 		EXECUTE format('CREATE UNIQUE INDEX idx_%1$s_gid ON %1$I USING BTREE(gid)', 
 					   species_sensitivity_mode_final_table);
 
-		RAISE INFO 'Creating temporary table %', species_sensitivity_all_areas_table;
+		RAISE INFO 'bh3_sensitivity_map: Creating temporary table %', species_sensitivity_all_areas_table;
 
 		/* species_sensitivity_all_areas = species_sensitivity_mode_final + species_sensitivity_max */
 		EXECUTE format('CREATE TEMP TABLE %1$I AS '
@@ -206,7 +206,7 @@ BEGIN
 		EXECUTE format('CREATE UNIQUE INDEX idx_%1$s_gid ON %1$I USING BTREE(gid)', 
 					   species_sensitivity_all_areas_table);
 
-		RAISE INFO 'Creating temporary table %', habitat_sensitivity_final_table;
+		RAISE INFO 'bh3_sensitivity_map: Creating temporary table %', habitat_sensitivity_final_table;
 
 		/* habitat_sensitivity_final = habitat_sensitivity - species_sensitivity_all_areas */
 		EXECUTE format('CREATE TABLE %1$I AS '
@@ -295,7 +295,7 @@ BEGIN
 		EXECUTE format('CREATE UNIQUE INDEX idx_%1$s_gid ON %1$I USING BTREE(gid)', 
 					   habitat_sensitivity_final_table);
 
-		RAISE INFO 'Creating table %.%', output_schema, output_table;
+		RAISE INFO 'bh3_sensitivity_map: Creating table %.%', output_schema, output_table;
 
 		EXECUTE format('CREATE TABLE %1$I.%2$I '
 					   '('
@@ -308,7 +308,7 @@ BEGIN
 					   ')',
 					   output_schema, output_table);
 
-		RAISE INFO 'Populating table %.%', output_schema, output_table;
+		RAISE INFO 'bh3_sensitivity_map: Populating table %.%', output_schema, output_table;
 
 		/* sensitivity_map = habitat_sensitivity_final + species_sensitivity_all_areas */
 		EXECUTE format('WITH cte_union AS '
@@ -362,16 +362,17 @@ BEGIN
 					   output_schema, output_table);
 
 		/* drop temp tables */
-		RAISE INFO 'Dropping temporary table %', species_sensitivity_mode_final_table;
+		RAISE INFO 'bh3_sensitivity_map: Dropping temporary table %', species_sensitivity_mode_final_table;
 		CALL bh3_drop_temp_table(species_sensitivity_mode_final_table);
-		RAISE INFO 'Dropping temporary table %', species_sensitivity_all_areas_table;
+		RAISE INFO 'bh3_sensitivity_map: Dropping temporary table %', species_sensitivity_all_areas_table;
 		CALL bh3_drop_temp_table(species_sensitivity_all_areas_table);
-		RAISE INFO 'Dropping temporary table %', habitat_sensitivity_final_table;
+		RAISE INFO 'bh3_sensitivity_map: Dropping temporary table %', habitat_sensitivity_final_table;
 		CALL bh3_drop_temp_table(habitat_sensitivity_final_table);
 	EXCEPTION WHEN OTHERS THEN
 		GET STACKED DIAGNOSTICS exc_text = MESSAGE_TEXT,
 								  exc_detail = PG_EXCEPTION_DETAIL,
 								  exc_hint = PG_EXCEPTION_HINT;
+		RAISE INFO 'bh3_sensitivity_map: Error. Message: %. Detail: %. Hint: %.', exc_text, exc_detail, exc_hint;
 	END;
 END;
 $BODY$;

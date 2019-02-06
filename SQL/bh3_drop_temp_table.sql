@@ -11,7 +11,7 @@ DECLARE
 	temp_table name;
 
 BEGIN
-	IF length(coalesce(table_name)) > 0 THEN
+	IF length(coalesce(table_name, '')) > 0 THEN
 		EXECUTE format('DROP TABLE IF EXISTS %1$I', table_name);
 
 		EXECUTE format('SELECT quote_ident(n.nspname) || ''.'' || quote_ident(c.relname) '

@@ -6,8 +6,7 @@ CREATE OR REPLACE FUNCTION public.bh3_get_pressure_csquares(
 	boundary_filter integer,
 	pressure_schema name,
 	date_start timestamp without time zone,
-	date_end timestamp without time zone DEFAULT now(
-	),
+	date_end timestamp without time zone DEFAULT now(),
 	sar_surface_column name DEFAULT 'sar_surface'::name,
 	sar_subsurface_column name DEFAULT 'sar_subsurface'::name,
 	boundary_schema name DEFAULT 'static'::name,
@@ -17,8 +16,7 @@ CREATE OR REPLACE FUNCTION public.bh3_get_pressure_csquares(
     RETURNS TABLE(
 		gid bigint,
 		c_square character varying,
-		n bigint,
-		sar_surface_min double precision,
+		n bigint, sar_surface_min double precision,
 		sar_surface_max double precision,
 		sar_surface_avg double precision,
 		sar_surface_cat_min integer,
@@ -202,7 +200,7 @@ BEGIN
 							  'FROM cte_agg',
 							  substring(sqlstmt FROM 7));
 		
-			RAISE INFO 'sqlstmt: %', sqlstmt;
+			RAISE INFO 'bh3_get_pressure_csquares: sqlstmt: %', sqlstmt;
 
 			RETURN QUERY EXECUTE sqlstmt USING boundary_filter, start_year, end_year;
 		END IF;
@@ -210,7 +208,8 @@ BEGIN
 		GET STACKED DIAGNOSTICS exc_text = MESSAGE_TEXT,
 								  exc_detail = PG_EXCEPTION_DETAIL,
 								  exc_hint = PG_EXCEPTION_HINT;
-		RAISE INFO 'Exception. Message: %. Detail: %. Hint: %', exc_text, exc_detail, exc_hint;
+		RAISE INFO 'bh3_get_pressure_csquares: Exception. Message: %. Detail: %. Hint: %', 
+										exc_text, exc_detail, exc_hint;
 	END;
 END;
 $BODY$;

@@ -1,6 +1,6 @@
--- FUNCTION: public.bh3_sensitivity_layer_prep(name, name, integer, sensitivity_source, timestamp without time zone, timestamp without time zone, name, name, name, name, name, name, boolean, integer)
+-- FUNCTION: public.bh3_sensitivity_layer_prep(name, name, integer, sensitivity_source, timestamp without time zone, timestamp without time zone, character varying[], name, name, name, name, name, name, boolean, boolean, integer)
 
--- DROP FUNCTION public.bh3_sensitivity_layer_prep(name, name, integer, sensitivity_source, timestamp without time zone, timestamp without time zone, name, name, name, name, name, name, boolean, integer);
+-- DROP FUNCTION public.bh3_sensitivity_layer_prep(name, name, integer, sensitivity_source, timestamp without time zone, timestamp without time zone, character varying[], name, name, name, name, name, name, boolean, boolean, integer);
 
 CREATE OR REPLACE FUNCTION public.bh3_sensitivity_layer_prep(
 	habitat_schema name,
@@ -9,6 +9,7 @@ CREATE OR REPLACE FUNCTION public.bh3_sensitivity_layer_prep(
 	sensitivity_source_table sensitivity_source,
 	date_start timestamp without time zone,
 	date_end timestamp without time zone DEFAULT now(),
+	habitat_types_filter character varying[] DEFAULT NULL::character varying[],
 	habitat_table name DEFAULT 'habitat_sensitivity'::name,
 	habitat_table_grid name DEFAULT 'habitat_sensitivity_grid'::name,
 	output_table_max name DEFAULT 'species_sensitivity_max'::name,
@@ -16,6 +17,7 @@ CREATE OR REPLACE FUNCTION public.bh3_sensitivity_layer_prep(
 	boundary_schema name DEFAULT 'static'::name,
 	boundary_table name DEFAULT 'official_country_waters_wgs84'::name,
 	boundary_filter_negate boolean DEFAULT false,
+	habitat_types_filter_negate boolean DEFAULT false,
 	output_srid integer DEFAULT 4326,
 	OUT success boolean,
 	OUT exc_text text,
@@ -28,6 +30,8 @@ CREATE OR REPLACE FUNCTION public.bh3_sensitivity_layer_prep(
     VOLATILE 
 AS $BODY$
 DECLARE
+	start_time timestamp;
+	rows_affected bigint;
 	tn name;
 	species_clip_table name;
 	srid_hab int;
@@ -40,6 +44,8 @@ BEGIN
 		success := false;
 		species_clip_table := 'species_clip'::name;
 
+		start_time := clock_timestamp();
+
 		/* clean up any previous output left behind */
 		FOR tn IN 
 			EXECUTE format('SELECT c.relname '
@@ -50,6 +56,13 @@ BEGIN
 		LOOP
 			EXECUTE 'SELECT DropGeometryTable($1::text,$2::text)' USING output_schema, tn;
 		END LOOP;
+
+		/* remove any previous species clipped temporary table left behind */
+		CALL bh3_drop_temp_table(species_clip_table);
+
+		RAISE INFO 'bh3_habitat_boundary_clip: Dropped any previous outputs left behind: %', (clock_timestamp() - start_time);
+
+		start_time := clock_timestamp();
 
 		srid_hab := bh3_find_srid(habitat_schema, habitat_table, 'the_geom');
 		IF srid_hab != output_srid AND srid_hab > 0 AND srid_hab > 0 THEN
@@ -64,24 +77,33 @@ BEGIN
 			transform_exp := 'hab.the_geom';
 		END IF;
 
-		/* remove any previous species clipped temporary table left behind */
-		CALL bh3_drop_temp_table(species_clip_table);
-
 		/* create species clipped temporary table used by both queries below */
 		EXECUTE format('CREATE TEMP TABLE %1$I AS '
 					   'SELECT gid'
 						   ',the_geom'
 						   ',sensitivity_ab_su_num'
 						   ',sensitivity_ab_ss_num '
-					   'FROM bh3_species_sensitivity_clipped($1,$2,$3,$4,$5,$6,$7,$8)',
+					   'FROM bh3_species_sensitivity_clipped($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)',
 					   species_clip_table)
 		USING boundary_schema, boundary_table, boundary_filter, sensitivity_source_table, 
-			date_start, date_end, boundary_filter_negate, output_srid;
+			date_start, habitat_types_filter, date_end, boundary_filter_negate, habitat_types_filter_negate,
+			output_srid;
+
+		GET DIAGNOSTICS rows_affected = ROW_COUNT;
+		RAISE INFO 'bh3_habitat_boundary_clip: Inserted % rows into temporary table %: %', 
+			rows_affected, species_clip_table, (clock_timestamp() - start_time);
+
+		start_time := clock_timestamp();
 
 		EXECUTE format('CREATE INDEX sidx_%1$s_the_geom ON %1$I USING GIST(the_geom)', species_clip_table);
 		EXECUTE format('CREATE INDEX idx_%1$s_gid ON %1$I USING BTREE(gid)', species_clip_table);
 		EXECUTE format('CREATE INDEX idx_%1$s_sensitivity_ab_su_num ON %1$I USING BTREE(sensitivity_ab_su_num)', species_clip_table);
 		EXECUTE format('CREATE INDEX idx_%1$s_sensitivity_ab_ss_num ON %1$I USING BTREE(sensitivity_ab_ss_num)', species_clip_table);
+
+		RAISE INFO 'bh3_habitat_boundary_clip: Indexed temporary table %: %', 
+			species_clip_table, (clock_timestamp() - start_time);
+
+		start_time := clock_timestamp();
 
 		/* create species sensitivity maximum table */
 		EXECUTE format('CREATE TABLE %1$I.%2$I '
@@ -145,6 +167,12 @@ BEGIN
 					   habitat_schema, habitat_table_grid, species_clip_table, 
 					   geom_exp_hab, output_schema, output_table_max);
 
+		GET DIAGNOSTICS rows_affected = ROW_COUNT;
+		RAISE INFO 'bh3_habitat_boundary_clip: Inserted % rows into output table %.%: %', 
+			rows_affected, output_schema, output_table_max, (clock_timestamp() - start_time);
+
+		start_time := clock_timestamp();
+
 		/* create indexes on species sensitivity maximum table */
 		EXECUTE format('CREATE INDEX sidx_%2$I_the_geom ON %1$I.%2$I USING GIST(the_geom)',
 					   output_schema, output_table_max);
@@ -158,6 +186,11 @@ BEGIN
 					   output_schema, output_table_max);
 		EXECUTE format('CREATE INDEX idx_%2$I_sensitivity_ab_ss_num ON %1$I.%2$I USING BTREE(sensitivity_ab_ss_num)',
 					   output_schema, output_table_max);
+
+		RAISE INFO 'bh3_habitat_boundary_clip: Indexed output table %.%: %', 
+			output_schema, output_table_max, (clock_timestamp() - start_time);
+
+		start_time := clock_timestamp();
 
 		/* create species sensitivity mode table */
 		EXECUTE format('CREATE TABLE %1$I.%2$I '
@@ -264,6 +297,12 @@ BEGIN
 					   habitat_schema, habitat_table, species_clip_table, geom_exp_hab, 
 					   output_schema, output_table_mode, transform_exp);
 
+		GET DIAGNOSTICS rows_affected = ROW_COUNT;
+		RAISE INFO 'bh3_habitat_boundary_clip: Inserted % rows into output table %.%: %', 
+			rows_affected, output_schema, output_table_mode, (clock_timestamp() - start_time);
+
+		start_time := clock_timestamp();
+
 		/* create indexes on species sensitivity mode table */
 		EXECUTE format('CREATE INDEX sidx_%2$I_the_geom ON %1$I.%2$I USING GIST(the_geom)',
 					   output_schema, output_table_mode);
@@ -278,6 +317,11 @@ BEGIN
 		EXECUTE format('CREATE INDEX idx_%2$I_sensitivity_ab_ss_num ON %1$I.%2$I USING BTREE(sensitivity_ab_ss_num)',
 					   output_schema, output_table_mode);
 
+		RAISE INFO 'bh3_habitat_boundary_clip: Indexed output table %.%: %', 
+			output_schema, output_table_mode, (clock_timestamp() - start_time);
+
+		start_time := clock_timestamp();
+
 		/* remove species clipped temporary table */
 		CALL bh3_drop_temp_table(species_clip_table);
 
@@ -286,9 +330,10 @@ BEGIN
 		GET STACKED DIAGNOSTICS exc_text = MESSAGE_TEXT,
 								  exc_detail = PG_EXCEPTION_DETAIL,
 								  exc_hint = PG_EXCEPTION_HINT;
+		RAISE INFO 'bh3_sensitivity_layer_prep: Error. Message: %. Detail: %. Hint: %', exc_ext, exc_detail, exc_hint;
 	END;
 END;
 $BODY$;
 
-ALTER FUNCTION public.bh3_sensitivity_layer_prep(name, name, integer, sensitivity_source, timestamp without time zone, timestamp without time zone, name, name, name, name, name, name, boolean, integer)
+ALTER FUNCTION public.bh3_sensitivity_layer_prep(name, name, integer, sensitivity_source, timestamp without time zone, timestamp without time zone, character varying[], name, name, name, name, name, name, boolean, boolean, integer)
     OWNER TO postgres;

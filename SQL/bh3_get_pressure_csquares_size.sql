@@ -5,8 +5,7 @@
 CREATE OR REPLACE FUNCTION public.bh3_get_pressure_csquares_size(
 	pressure_schema name,
 	date_start timestamp without time zone,
-	date_end timestamp without time zone DEFAULT now(
-	),
+	date_end timestamp without time zone DEFAULT now(),
 	sar_surface_column name DEFAULT 'sar_surface'::name,
 	sar_subsurface_column name DEFAULT 'sar_subsurface'::name,
 	output_srid integer DEFAULT 4326)

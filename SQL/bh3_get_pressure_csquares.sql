@@ -16,7 +16,8 @@ CREATE OR REPLACE FUNCTION public.bh3_get_pressure_csquares(
     RETURNS TABLE(
 		gid bigint,
 		c_square character varying,
-		n bigint, sar_surface_min double precision,
+		n bigint,
+		sar_surface_min double precision,
 		sar_surface_max double precision,
 		sar_surface_avg double precision,
 		sar_surface_cat_min integer,

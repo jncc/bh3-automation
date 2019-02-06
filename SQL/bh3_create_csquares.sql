@@ -82,10 +82,14 @@ BEGIN
 			'),'
 			'cte_grid AS '
 			'('
-				'SELECT ST_CreateFishnet('
-					'((ymax - ymin) / %5$s)::integer, '
-					'((xmax - xmin) / %5$s)::integer,'
-					'%5$s,%5$s,xmin,ymin,4326) AS grid_row '
+				'SELECT bh3_create_fishnet('
+					'((ymax - ymin) / %5$s)::integer'
+					',((xmax - xmin) / %5$s)::integer'
+					',%5$s'
+					',%5$s'
+					',xmin'
+					',ymin'
+					',4326) AS grid_row '
 				'FROM cte_bbox_meas'
 			') '
 			'SELECT ROW_NUMBER() OVER() AS gid' 
@@ -100,7 +104,7 @@ BEGIN
 		GET STACKED DIAGNOSTICS exc_text = MESSAGE_TEXT,
 								  exc_detail = PG_EXCEPTION_DETAIL,
 								  exc_hint = PG_EXCEPTION_HINT;
-		RAISE INFO 'Exception. Message: %. Detail: %. Hint: %', exc_text, exc_detail, exc_hint;
+		RAISE INFO 'bh3_create_csquares: Exception. Message: %. Detail: %. Hint: %', exc_text, exc_detail, exc_hint;
 	END;
 END;
 $BODY$;

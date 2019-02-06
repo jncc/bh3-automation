@@ -9,64 +9,65 @@ select * from test.pressure_map where not ST_IsValid(the_geom) or not ST_IsSimpl
 
 CREATE SCHEMA IF NOT EXISTS wales;
 
-/* create habitat_sensitivity and habitat_sensitivity_grid for Wales in schema "wales"
-from habitat map static.uk_habitat_map_wgs84 (result of ArcGIS union) 
+/* determine the c-square size from the pressure tables */
+SELECT * 
+FROM public.bh3_get_pressure_csquares_size(
+	'ices_abrasion'							--pressure_schema name
+	,'2012-01-01'::timestamp				--date_start timestamp without time zone
+	,now()::timestamp						--date_end timestamp without time zone DEFAULT now()
+	,'sar_surface'							--sar_surface_column name DEFAULT 'sar_surface'::name
+	,'sar_subsurface'						--sar_subsurface_column name DEFAULT 'sar_subsurface'::name
+	,4326									--output_srid integer DEFAULT 4326
+);
+
+
+/* create habitat_sensitivity for selected AOI in output_schema 
 outputs:	habitat_sensitivity
-			habitat_sensitivity_grid
+calls:		bh3_drop_temp_table
+			bh3_find_srid
+run time: 	2 min 29 secs w/o overlaps (Wales) */
+SELECT * 
+FROM public.bh3_habitat_boundary_clip(
+	0::integer								--boundary_filter integer,
+	,NULL::character varying[]				--habitat_types_filter character varying[]
+	,'wales'								--output_schema name
+	,'habitat_sensitivity'					--output_table name DEFAULT 'habitat_sensitivity'::name
+	,'static'								--habitat_schema name DEFAULT 'static'::name
+	,'uk_habitat_map_wgs84'					--habitat_table name DEFAULT 'uk_habitat_map_wgs84'::name
+	,'lut'									--sensitivity_schema name DEFAULT 'lut'::name
+	,'sensitivity_broadscale_habitats'		--sensitivity_table name DEFAULT 'sensitivity_broadscale_habitats'::name
+	,'static'								--boundary_schema name DEFAULT 'static'::name
+	,'official_country_waters_wgs84'		--boundary_table name DEFAULT 'official_country_waters_wgs84'::name
+	,false									--boundary_filter_negate boolean DEFAULT false
+	,false									--habitat_types_filter_negate boolean DEFAULT false
+	,true									--exclude_empty_mismatched_eunis_l3 boolean DEFAULT true
+	,false									--remove_overlaps boolean DEFAULT false
+
+
+/* grid habitat_sensitivity into create habitat_sensitivity_grid  
+outputs:	habitat_sensitivity_grid
 calls:		bh3_drop_temp_table
 			bh3_find_srid
 			bh3_create_csquares
-run time: 	2 min 40 secs */
+			bh3_create_fishnet
+run time: 	24 secs 422 msec (Wales) */
 SELECT * 
 FROM public.bh3_habitat_grid(
-	0::integer --boundary_filter integer
-	,NULL::character varying[] --habitat_types_filter character varying[]
-	,'wales' --output_schema name
-	,'habitat_sensitivity'::name --,output_table name DEFAULT 'habitat_sensitivity'::name
-	,'habitat_sensitivity_grid'::name --,output_table_grid name DEFAULT 'habitat_sensitivity_grid'::name
-	,'static'::name --,habitat_schema name DEFAULT 'static'::name
-	,'uk_habitat_map_wgs84'::name --,habitat_table name DEFAULT 'uk_habitat_map_wgs84'::name
-	,'lut'::name --,sensitivity_schema name DEFAULT 'lut'::name
-	,'sensitivity_broadscale_habitats'::name --,sensitivity_table name DEFAULT 'sensitivity_broadscale_habitats'::name
-	,'static'::name --,boundary_schema name DEFAULT 'static'::name
-	,'official_country_waters_wgs84'::name --,boundary_table name DEFAULT 'official_country_waters_wgs84'::name
-	,false --,boundary_filter_negate boolean DEFAULT false
-	,false --,habitat_types_filter_negate boolean DEFAULT false
-	,true --,exclude_empty_mismatched_eunis_l3 boolean DEFAULT true
-	,true --,remove_overlaps boolean DEFAULT false
-	,0.05 --,cell_size_degrees numeric DEFAULT 0.05
-);
-/* create habitat_sensitivity and habitat_sensitivity_grid for Wales in schema "wales"
-outputs:	habitat_sensitivity
-			habitat_sensitivity_grid
-calls:		bh3_drop_temp_table
-			bh3_find_srid
-			bh3_create_csquares
-run time: 	2 min 48 secs (excluding empty/mismatched eunis_l3)
-			8 min  4 secs (including empty/mismatched eunis_l3) */
-SELECT *
-FROM public.bh3_habitat_clip_by_subdivide(
-	0::integer --boundary_filter integer
-	,NULL::character varying[] --habitat_types_filter character varying[]
-	,'wales'::name --output_schema name,
-	,'habitat_sensitivity'::name--,output_table name DEFAULT 'habitat_sensitivity'::name
-	,'habitat_sensitivity_grid'::name--,output_table_grid name DEFAULT 'habitat_sensitivity_grid'::name
-	,'static'::name--,habitat_schema name DEFAULT 'static'::name
-	,'uk_habitat_map_wgs84'::name--,habitat_table name DEFAULT 'uk_habitat_map_wgs84'::name
-	,'lut'::name--,sensitivity_schema name DEFAULT 'lut'::name
-	,'sensitivity_broadscale_habitats'::name--,sensitivity_table name DEFAULT 'sensitivity_broadscale_habitats'::name
-	,'static'::name--,boundary_schema name DEFAULT 'static'::name
-	,'official_country_waters_wgs84'::name--,boundary_table name DEFAULT 'official_country_waters_wgs84'::name
-	,false--,boundary_filter_negate boolean DEFAULT false
-	,false--,habitat_types_filter_negate boolean DEFAULT false
-	,false--,exclude_empty_mismatched_eunis_l3 boolean DEFAULT true
-	,0.05::numeric--,cell_size_degrees numeric DEFAULT 0.05
+	0										--boundary_filter integer
+	,'wales'								--,habitat_sensitivity_schema name
+	,'wales'								--,output_schema name
+	,'habitat_sensitivity'					--,habitat_sensitivity_table name DEFAULT 'habitat_sensitivity'::name
+	,'habitat_sensitivity_grid'				--,output_table name DEFAULT 'habitat_sensitivity_grid'::name
+	,'static'								--,boundary_schema name DEFAULT 'static'::name
+	,'official_country_waters_wgs84'		--,boundary_table name DEFAULT 'official_country_waters_wgs84'::name
+	,false									--,boundary_filter_negate boolean DEFAULT false
+	,0.05									--,cell_size_degrees numeric DEFAULT 0.05
 );
 
 
 
-/* create species_sensitivity_max and species_sensitivity_mode for Wales in schema "test" 
-using habitat_sensitivity and habitat_sensitivity_grid created in presvious steps 
+/* create species_sensitivity_max and species_sensitivity_mode for selected AOI in 
+output_schema using habitat_sensitivity and habitat_sensitivity_grid created in presvious step,
 rock/eco group sensitivity scores and Marine Recorder samples starting 2012-01-01. 
 outputs:	species_sensitivity_max
 			species_sensitivity_mode
@@ -74,64 +75,67 @@ calls:		bh3_find_srid
 			bh3_drop_temp_table
 			bh3_species_sensitivity_clipped
 			bh3_sensitivity
-run time:	32 secs 852 msec */
+run time:	32 secs 852 msec (Wales) */
 SELECT * 
-FROM public.bh3_sensitivity_layer_prep(
-	'wales' --habitat_schema name
-	,'wales' --output_schema name
-	,0 --boundary_filter integer
-	,'rock_eco_groups'::sensitivity_source --sensitivity_source_table sensitivity_source
-	,'2012-01-01'::timestamp --date_start timestamp without time zone
-	--,date_end timestamp without time zone DEFAULT now()
-	--,habitat_table name DEFAULT 'habitat_sensitivity'::name
-	--,habitat_table_grid name DEFAULT 'habitat_sensitivity_grid'::name
-	--,output_table_max name DEFAULT 'species_sensitivity_max'::name
-	--,output_table_mode name DEFAULT 'species_sensitivity_mode'::name
-	--,boundary_schema name DEFAULT 'static'::name
-	--,boundary_table name DEFAULT 'official_country_waters_wgs84'::name
-	--,boundary_filter_negate boolean DEFAULT false
-	--,output_srid integer DEFAULT 4326
+FROM bh3_sensitivity_layer_prep(
+	'wales'									--habitat_schema name
+	,'wales'								--output_schema name
+	,0										--boundary_filter integer
+	,'rock_eco_groups'::sensitivity_source	--sensitivity_source_table sensitivity_source
+	,'2012-01-01'::timestamp				--date_start timestamp without time zone
+	,now()::timestamp						--date_end timestamp without time zone DEFAULT now()
+	,NULL::character varying[]				--habitat_types_filter character varying[] DEFAULT NULL
+	,'habitat_sensitivity'					--habitat_table name DEFAULT 'habitat_sensitivity'::name
+	,'habitat_sensitivity_grid'				--habitat_table_grid name DEFAULT 'habitat_sensitivity_grid'::name
+	,species_sensitivity_max_table			--output_table_max name DEFAULT 'species_sensitivity_max'::name
+	,'species_sensitivity_max'				--output_table_mode name DEFAULT 'species_sensitivity_mode'::name
+	,'static'								--boundary_schema name DEFAULT 'static'::name
+	,'official_country_waters_wgs84'		--boundary_table name DEFAULT 'official_country_waters_wgs84'::name
+	,false									--boundary_filter_negate boolean DEFAULT false
+	,false									--habitat_types_filter_negate boolean DEFAULT false
+	,4326									--output_srid integer DEFAULT 4326
 );
 
-/* create sensitivity_map in schema "test" from habitat_sensitivity, species_sensitivity_max 
-and species_sensitivity_mode tables, all located in schema "test"
+
+/* create sensitivity_map in output_schema from habitat_sensitivity, species_sensitivity_max 
+and species_sensitivity_mode tables, all located in schema output_schema
 outputs:	sensitivity_map
 calls:		bh3_drop_temp_table
-run time: 6 min 7 secs */
+run time: 6 min 7 secs (Wales) */
 SELECT * 
-FROM public.bh3_sensitivity_map(
-	'wales' --habitat_sensitivity_schema name
-	,'wales' --species_sensitivity_schema name
-	,'wales' --output_schema name
-	--,habitat_sensitivity_table name DEFAULT 'habitat_sensitivity'::name
-	--,species_sensitivity_max_table name DEFAULT 'species_sensitivity_max'::name
-	--,species_sensitivity_mode_table name DEFAULT 'species_sensitivity_mode'::name
-	--,output_table name DEFAULT 'sensitivity_map'::name
+FROM bh3_sensitivity_map(
+	'wales'									--habitat_sensitivity_schema name
+	,'wales'								--species_sensitivity_schema name
+	,'wales'								--output_schema name
+	,'habitat_sensitivity'					--habitat_sensitivity_table name DEFAULT 'habitat_sensitivity'::name
+	,'species_sensitivity_max'				--species_sensitivity_max_table name DEFAULT 'species_sensitivity_max'::name
+	,'species_sensitivity_mode'				--species_sensitivity_mode_table name DEFAULT 'species_sensitivity_mode'::name
+	,'sensitivity_map'						--output_table name DEFAULT 'sensitivity_map'::name
+	,4326									--output_srid integer DEFAULT 4326
 );
 
 
-/* create pressure_map for Wales in schema "test" from sensitivity_map 
-in schema "test" and pressure tables in schema "ices_abrasion".
-outputs:	disturbance_map
+/* create pressure_map for selected AOI in output_schema from sensitivity_map 
+in output_schema and pressure tables in pressure_schema.
+outputs:	pressure_map
 calls:		bh3_drop_temp_table
 			bh3_get_pressure_csquares
 			bh3_find_srid
-run time:	55 secs 313 msec
-			(1 min 2 secs [query]) */
+run time:	55 secs 313 msec (Wales) */
 SELECT *
-FROM public.bh3_disturbance_map(
-	0 --boundary_filter integer
-	,'2012-01-01'::timestamp --date_start timestamp without time zone
-	,'ices_abrasion' --pressure_schema name 
-	,'wales' --sensitivity_map_schema name
-	,'wales' --output_schema name
-	--,boundary_schema name DEFAULT 'static'::name
-	--,boundary_table name DEFAULT 'official_country_waters_wgs84'::name
-	--,sensitivity_map_table name DEFAULT 'sensitivity_map'::name
-	--,output_table name DEFAULT 'pressure_map'::name
-	--,sar_surface_column name DEFAULT 'sar_surface'
-	--,sar_subsurface_column name DEFAULT 'sar_subsurface'
-	--,boundary_filter_negate boolean DEFAULT false
-	--,date_end timestamp without time zone DEFAULT now()
-	--,output_srid integer DEFAULT 4326
+FROM bh3_disturbance_map(
+	0										--boundary_filter integer
+	,'2012-01-01'::timestamp				--date_start timestamp without time zone
+	,'ices_abrasion'						--pressure_schema name 
+	,'wales'								--sensitivity_map_schema name
+	,'wales'								--output_schema name
+	,'static'								--boundary_schema name DEFAULT 'static'::name
+	,'official_country_waters_wgs84'		--boundary_table name DEFAULT 'official_country_waters_wgs84'::name
+	,'sensitivity_map'						--sensitivity_map_table name DEFAULT 'sensitivity_map'::name
+	,'disturbance_map'						--output_table name DEFAULT 'disturbance_map'::name
+	,'sar_surface'							--sar_surface_column name DEFAULT 'sar_surface'::name
+	,'sar_subsurface'						--sar_subsurface_column name DEFAULT 'sar_subsurface'::name
+	,false									--boundary_filter_negate boolean DEFAULT false
+	,now()::timestamp						--date_end timestamp without time zone DEFAULT now()
+	,4326									--output_srid integer DEFAULT 4326
 );

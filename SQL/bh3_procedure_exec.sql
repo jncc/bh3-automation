@@ -23,6 +23,5 @@ CALL public.bh3_procedure(
 	,false										--boundary_filter_negate boolean DEFAULT false
 	,false										--habitat_types_filter_negate boolean DEFAULT false
 	,false										--remove_overlaps boolean DEFAULT false
-	,0.05										--cell_size_degrees numeric DEFAULT 0.05
 	,4326										--output_srid integer DEFAULT 4326
 );

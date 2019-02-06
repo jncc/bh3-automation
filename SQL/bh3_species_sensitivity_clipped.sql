@@ -1,15 +1,17 @@
--- FUNCTION: public.bh3_species_sensitivity_clipped(name, name, integer, sensitivity_source, timestamp without time zone, timestamp without time zone, boolean, integer)
+-- FUNCTION: public.bh3_species_sensitivity_clipped(name, name, integer, sensitivity_source, timestamp without time zone, character varying[], timestamp without time zone, boolean, boolean, integer)
 
--- DROP FUNCTION public.bh3_species_sensitivity_clipped(name, name, integer, sensitivity_source, timestamp without time zone, timestamp without time zone, boolean, integer);
+-- DROP FUNCTION public.bh3_species_sensitivity_clipped(name, name, integer, sensitivity_source, timestamp without time zone, character varying[], timestamp without time zone, boolean, boolean, integer);
 
 CREATE OR REPLACE FUNCTION public.bh3_species_sensitivity_clipped(
 	boundary_schema name,
 	boundary_table name,
-	boundary_filter_key integer,
+	boundary_filter integer,
 	sensitivity_source_table sensitivity_source,
 	date_start timestamp without time zone,
+	habitat_types_filter character varying[] DEFAULT NULL::character varying[],
 	date_end timestamp without time zone DEFAULT now(),
 	boundary_filter_negate boolean DEFAULT false,
+	habitat_types_filter_negate boolean DEFAULT false,
 	output_srid integer DEFAULT 4326)
     RETURNS TABLE(
 		gid bigint,
@@ -36,9 +38,10 @@ CREATE OR REPLACE FUNCTION public.bh3_species_sensitivity_clipped(
     ROWS 1000
 AS $BODY$
 DECLARE
-	negation text;
 	srid_smp int;
+	negation text;
 	geom_exp_smp text;
+	habitat_type_condition text;
 
 BEGIN
 	IF boundary_filter_negate THEN
@@ -52,6 +55,23 @@ BEGIN
 		geom_exp_smp := format('ST_Transform(smp.%1$I,%2$s) AS %1$I', 'the_geom', output_srid);
 	ELSE 
 		geom_exp_smp := format('smp.%I', 'the_geom');
+	END IF;
+
+	habitat_type_condition := '';
+	IF habitat_types_filter IS NOT NULL AND array_length(habitat_types_filter, 1) > 0 THEN
+		IF length(habitat_types) = 1 THEN
+			IF habitat_types_filter_negate THEN 
+				habitat_type_condition := format('AND ect.%1$I != $5', 'eunis_code_2004', habitat_types[1]);
+			ELSE
+				habitat_type_condition := format('AND ect.%1$I = $5', 'eunis_code_2004', habitat_types[1]);
+			END IF;
+		ELSE
+			IF habitat_types_filter_negate THEN
+				habitat_type_condition := format('AND NOT hab.%1$I = ANY ($5)', 'eunis_code_2004');
+			ELSE
+				habitat_type_condition := format('AND ect.%1$I = ANY ($5)', 'eunis_code_2004');
+			END IF;
+		END IF;
 	END IF;
 
 	RETURN QUERY EXECUTE format('SELECT ROW_NUMBER() OVER() AS gid'
@@ -78,14 +98,15 @@ BEGIN
 									'JOIN bh3_sensitivity($1) egr ON egr.characterising_species = spc.species_name '
 									'JOIN marinerec.sample_biotope_all sba ON smp.sample_reference = sba.sample_reference '
 									'JOIN lut.eunis_correlation_table ect ON ect.jncc_15_03_code = sba.biotope_code '
-									'JOIN %2$I.%3$I bnd ON ST_Contains(bnd.the_geom,%1$s)'
+									'JOIN %2$I.%3$I bnd ON ST_CoveredBy(%1$s,bnd.the_geom)'
 								'WHERE %4$s bnd.gid = $2 '
 									'AND smp.sample_date >= $3 '
-									'AND smp.sample_date <= $4',
-								geom_exp_smp, boundary_schema, boundary_table, negation)
-	USING sensitivity_source_table, boundary_filter_key, date_start, date_end;
+									'AND smp.sample_date <= $4 '
+									'%5$s',
+								geom_exp_smp, boundary_schema, boundary_table, negation, habitat_type_condition)
+	USING sensitivity_source_table, boundary_filter, date_start, date_end, CASE WHEN true THEN habitat_types_filter ELSE NULL END;
 END;
 $BODY$;
 
-ALTER FUNCTION public.bh3_species_sensitivity_clipped(name, name, integer, sensitivity_source, timestamp without time zone, timestamp without time zone, boolean, integer)
+ALTER FUNCTION public.bh3_species_sensitivity_clipped(name, name, integer, sensitivity_source, timestamp without time zone, character varying[], timestamp without time zone, boolean, boolean, integer)
     OWNER TO postgres;

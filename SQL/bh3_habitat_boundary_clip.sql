@@ -69,7 +69,7 @@ BEGIN
 		CALL bh3_drop_temp_table(temp_table_habitat_boundary_intersect);
 		CALL bh3_drop_temp_table(temp_table_habitat_boundary_intersect_union);
 
-		RAISE INFO 'Removed any outputs of previous runs: %', (clock_timestamp() - start_time);
+		RAISE INFO 'bh3_habitat_boundary_clip: Removed any outputs of previous runs: %', (clock_timestamp() - start_time);
 
 		start_time := clock_timestamp();
 
@@ -101,18 +101,15 @@ BEGIN
 		USING boundary_filter;
 
 		GET DIAGNOSTICS rows_affected = ROW_COUNT;
-		RAISE INFO 'Inserted % rows into temporary table %: %', 
+		RAISE INFO 'bh3_habitat_boundary_clip: Inserted % rows into temporary table %: %', 
 			rows_affected, temp_table_boundary_subdivide, (clock_timestamp() - start_time);
 
 		start_time := clock_timestamp();
 
-		EXECUTE format('UPDATE %1$I '
-					   'SET the_geom = ST_Buffer(the_geom,0) '
-					   'WHERE NOT ST_IsValid(the_geom) OR NOT ST_IsSimple(the_geom)',
-					   temp_table_boundary_subdivide);
+		CALL bh3_repair_geometries(NULL, temp_table_boundary_subdivide);
 
 		GET DIAGNOSTICS rows_affected = ROW_COUNT;
-		RAISE INFO 'Repaired % geometries in temporary table %: %', 
+		RAISE INFO 'bh3_habitat_boundary_clip: Repaired % geometries in temporary table %: %', 
 			rows_affected, temp_table_habitat_boundary_intersect, (clock_timestamp() - start_time);
 
 		start_time := clock_timestamp();
@@ -124,7 +121,7 @@ BEGIN
 		EXECUTE format('CREATE INDEX sidx_%1$s_the_geom ON %1$I USING GIST(the_geom)', 
 					   temp_table_boundary_subdivide);
 
-		RAISE INFO 'Indexed temporary table %: %', 
+		RAISE INFO 'bh3_habitat_boundary_clip: Indexed temporary table %: %', 
 			temp_table_boundary_subdivide, (clock_timestamp() - start_time);
 
 		start_time := clock_timestamp();
@@ -140,15 +137,15 @@ BEGIN
 		IF habitat_types_filter IS NOT NULL AND array_length(habitat_types_filter, 1) > 0 THEN
 			IF length(habitat_types) = 1 THEN
 				IF habitat_types_filter_negate THEN
-					habitat_type_condition := format('hab.%1$I != $2', 'eunis_l3', habitat_types[1]);
+					habitat_type_condition := format('hab.%1$I != %1$L', 'eunis_l3', habitat_types[1]);
 				ELSE
-					habitat_type_condition := format('hab.%1$I = $2', 'eunis_l3', habitat_types[1]);
+					habitat_type_condition := format('hab.%1$I = %1$L', 'eunis_l3', habitat_types[1]);
 				END IF;
 			ELSE
 				IF habitat_types_filter_negate THEN
-					habitat_type_condition := format('NOT hab.%1$I = ANY ($2)', 'eunis_l3');
+					habitat_type_condition := format('NOT hab.%1$I = ANY ($1)', 'eunis_l3');
 				ELSE
-					habitat_type_condition := format('hab.%1$I = ANY ($2)', 'eunis_l3');
+					habitat_type_condition := format('hab.%1$I = ANY ($1)', 'eunis_l3');
 				END IF;
 			END IF;
 		ELSIF exclude_empty_mismatched_eunis_l3 THEN
@@ -165,21 +162,19 @@ BEGIN
 					   'WHERE %6$s',
 					   temp_table_habitat_boundary_intersect, geom_exp_hab,
 					   habitat_schema, habitat_table, 
-					   temp_table_boundary_subdivide, habitat_type_condition);
+					   temp_table_boundary_subdivide, habitat_type_condition)
+		USING habitat_types_filter;
 
 		GET DIAGNOSTICS rows_affected = ROW_COUNT;
-		RAISE INFO 'Inserted % rows into temporary table %: %', 
+		RAISE INFO 'bh3_habitat_boundary_clip: Inserted % rows into temporary table %: %', 
 			rows_affected, temp_table_habitat_boundary_intersect, (clock_timestamp() - start_time);
 
 		start_time := clock_timestamp();
 
-		EXECUTE format('UPDATE %1$I '
-					   'SET the_geom = ST_Buffer(the_geom,0) '
-					   'WHERE NOT ST_IsValid(the_geom) OR NOT ST_IsSimple(the_geom)',
-					   temp_table_habitat_boundary_intersect);
+		CALL bh3_repair_geometries(NULL, temp_table_habitat_boundary_intersect);
 
 		GET DIAGNOSTICS rows_affected = ROW_COUNT;
-		RAISE INFO 'Repaired % geometries in temporary table %: %', 
+		RAISE INFO 'bh3_habitat_boundary_clip: Repaired % geometries in temporary table %: %', 
 			rows_affected, temp_table_habitat_boundary_intersect, (clock_timestamp() - start_time);
 
 		EXECUTE format('CREATE TEMP TABLE %1$I AS '
@@ -190,27 +185,24 @@ BEGIN
 					   'FROM %2$I hab '
 					   'WHERE the_geom IS NOT NULL '
 						   'AND NOT ST_IsEmpty(the_geom) '
-						   'AND ST_GeometryType(the_geom) ~* $1 '
+						   'AND ST_GeometryType(the_geom) ~* %3$L '
 					   'GROUP BY hab.gid'
 						   ',hab.hab_type'
 						   ',hab.eunis_l3',
 					   temp_table_habitat_boundary_intersect_union,
-					   temp_table_habitat_boundary_intersect)
-		USING 'Polygon';
+					   temp_table_habitat_boundary_intersect,
+					   'Polygon');
 
 		GET DIAGNOSTICS rows_affected = ROW_COUNT;
-		RAISE INFO 'Inserted % rows into temporary table %: %', 
+		RAISE INFO 'bh3_habitat_boundary_clip: Inserted % rows into temporary table %: %', 
 			rows_affected, temp_table_habitat_boundary_intersect_union, (clock_timestamp() - start_time);
 
 		start_time := clock_timestamp();
 
-		EXECUTE format('UPDATE %1$I '
-					   'SET the_geom = ST_Buffer(the_geom,0) '
-					   'WHERE NOT ST_IsValid(the_geom) OR NOT ST_IsSimple(the_geom)',
-					   temp_table_habitat_boundary_intersect_union);
+		CALL bh3_repair_geometries(NULL, temp_table_habitat_boundary_intersect_union);
 
 		GET DIAGNOSTICS rows_affected = ROW_COUNT;
-		RAISE INFO 'Repaired % geometries in temporary table %: %', 
+		RAISE INFO 'bh3_habitat_boundary_clip: Repaired % geometries in temporary table %: %', 
 			rows_affected, temp_table_habitat_boundary_intersect_union, (clock_timestamp() - start_time);
 
 		start_time := clock_timestamp();
@@ -222,7 +214,7 @@ BEGIN
 		EXECUTE format('CREATE INDEX idx_%1$s_eunis_l3gid ON %1$I USING BTREE(eunis_l3)',
 					   temp_table_habitat_boundary_intersect_union);
 
-		RAISE INFO 'Indexed temporary table %: %', 
+		RAISE INFO 'bh3_habitat_boundary_clip: Indexed temporary table %: %', 
 			temp_table_habitat_boundary_intersect_union, (clock_timestamp() - start_time);
 
 		start_time := clock_timestamp();
@@ -271,7 +263,7 @@ BEGIN
 					   left_join, sensitivity_schema, sensitivity_table);
 
 		GET DIAGNOSTICS rows_affected = ROW_COUNT;
-		RAISE INFO 'Inserted % rows into output table %.%: %', 
+		RAISE INFO 'bh3_habitat_boundary_clip: Inserted % rows into output table %.%: %', 
 			rows_affected, output_schema, output_table, (clock_timestamp() - start_time);
 
 		start_time := clock_timestamp();
@@ -280,7 +272,7 @@ BEGIN
 		EXECUTE format('CREATE INDEX sidx_%2$s_the_geom ON %1$I.%2$I USING GIST(the_geom)', output_schema, output_table);
 		EXECUTE format('CREATE UNIQUE INDEX idx_%2$s_gid ON %1$I.%2$I USING BTREE(gid)', output_schema, output_table);
 
-		RAISE INFO 'indexed output table %.%: %', 
+		RAISE INFO 'bh3_habitat_boundary_clip: indexed output table %.%: %', 
 			output_schema, output_table, (clock_timestamp() - start_time);
 
 		/* if requested remove overlaps from habitat sensitivity output table */
@@ -295,7 +287,7 @@ BEGIN
 						HINT = error_rec.exc_hint;
 			END IF;
 
-			RAISE INFO 'Removed overlaps from output table %.%: %', 
+			RAISE INFO 'bh3_habitat_boundary_clip: Removed overlaps from output table %.%: %', 
 				output_schema, output_table, (clock_timestamp() - start_time);
 			
 			start_time := clock_timestamp();
@@ -311,12 +303,46 @@ BEGIN
 		GET STACKED DIAGNOSTICS exc_text = MESSAGE_TEXT,
 								  exc_detail = PG_EXCEPTION_DETAIL,
 								  exc_hint = PG_EXCEPTION_HINT;
-		RAISE INFO 'Error text: %', exc_text;
-		RAISE INFO 'Error detail: %', exc_detail;
-		RAISE INFO 'Error hint: %', exc_hint;
+		RAISE INFO 'bh3_habitat_boundary_clip: Error text: %. Detail: %. Hint: %', exc_text, exc_detail, exc_hint;
 	END;
 END;
 $BODY$;
 
 ALTER FUNCTION public.bh3_habitat_boundary_clip(integer, character varying[], name, name, name, name, name, name, name, name, boolean, boolean, boolean, boolean)
     OWNER TO postgres;
+
+COMMENT ON FUNCTION public.bh3_habitat_boundary_clip(integer, character varying[], name, name, name, name, name, name, name, name, boolean, boolean, boolean, boolean)
+    IS 'Purpose:
+Creates habitat_sensitivity table for the selected AOI in the selected output schema.
+
+Approach:
+The AOI polygon/s is/are split into smaller parts with no more than 256 vertices each. These smaller parts are spatially joined to the habitat table 
+and the intersection of overlapping polygons is computed. The resulting polygons are then aggregated by the gid of the original habitat records, 
+computing the union of the pieces of the original polygons.
+Despite the extra steps and multiple geometry repairs between them, this is substantially faster than computing intersections directly with the 
+large boundary polygons.
+
+Parameters:
+boundary_filter: gid of the boundary polygon that delimits the AOI.
+habitat_types_filter: list of EUNIS L3 codes to be included or excluded.
+output_schema: Schema of the output habitat sensitivity table.
+output_table: Name of the output habitat sensitivity table. Defaults to ''habitat_sensitivity''.
+habitat_schema: Schema of the habitat table. Defaults to ''static''.
+habitat_table: Name of the habitat table. Defaults to ''uk_habitat_map_wgs84''.
+sensitivity_schema: Schema of the habitat sensitvity lookup table. Defaults to ''lut''.
+sensitivity_table name: name of the habitat sensitvity lookup table. Defaults to ''sensitivity_broadscale_habitats''.
+boundary_schema: Schema of the boundary table defining the AOI. Defaults to ''static''.
+boundary_table: Name of the boundary table defining the AOI. Defaults to ''official_country_waters_wgs84''.
+boundary_filter_negate: If false, the polygon identified by boundary_filter defines the AOI. Otherwise the AOI is defined by all but that polygon. Defaults to false.
+habitat_types_filter_negate: If false, the EUNIS L3 codes in habitat_types_filter are included, if true they are excluded. Defaults to false.
+exclude_empty_mismatched_eunis_l3: Controls whether habitats whose EUNIS L3 code is not matched in sensitivity_table are excluded (true) or included (false). Defaults to true.
+remove_overlaps: Controls whether bh3_habitat_remove_overlaps is called to remove overlaps from output_table. Defaults to false.
+																								  
+Returns:
+Single error record.
+
+Calls:
+bh3_drop_temp_table
+bh3_find_srid
+bh3_repair_geometries
+bh3_habitat_remove_overlaps';

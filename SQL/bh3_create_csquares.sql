@@ -10,11 +10,7 @@ CREATE OR REPLACE FUNCTION public.bh3_create_csquares(
 	boundary_filter_negate boolean DEFAULT false,
 	cell_size_degrees numeric DEFAULT 0.05,
 	output_srid integer DEFAULT 4326)
-    RETURNS TABLE(
-		gid bigint,
-		"row" integer,
-		col integer,
-		the_geom geometry) 
+    RETURNS TABLE(gid bigint, "row" integer, col integer, the_geom geometry) 
     LANGUAGE 'plpgsql'
 
     COST 100
@@ -115,3 +111,28 @@ $BODY$;
 
 ALTER FUNCTION public.bh3_create_csquares(integer, boolean, name, name, boolean, numeric, integer)
     OWNER TO postgres;
+
+COMMENT ON FUNCTION public.bh3_create_csquares(integer, boolean, name, name, boolean, numeric, integer)
+    IS 'Purpose:
+Creates an in-memory table of c-squares of the specified cell size within the specified polygon boundary.
+The output geometries may be clipped by the boundary polygon(s).
+
+Approach:
+Calls the bh3_create_finshnet function to create a grid within the bounding box of the unioned boundary geometries
+and returns the grid cells intersecting the boundary geometries, optionally clipping them by the boundary.
+
+Parameters:
+boundary_filter			integer		gid of boundary polygon in boundary_table.
+boundary_clip			boolean		If true grid will be clipped by boundary polygon. Defaults to false.
+boundary_schema			name		Schema of table containing AOI boundary polygons. Defaults to ''static''.
+boundary_table			name		Name of table containing AOI boundary polygons. Defaults to ''official_country_waters_wgs84''.
+boundary_filter_negate	boolean		If true condition built with boundary_filter is to be negated, i.e. the boundary is all but the polygon identified by boundary_filter. Defaults to false.
+cell_size_degrees		numeric		Cell size in degrees. Defaults to 0.05.
+output_srid				integer		SRID of output table. Defaults to 4326.
+
+Returns:
+An in-memory table of c-squares of the specified cell size within the specified polygon boundary.
+
+Calls:
+bh3_find_srid
+bh3_create_fishnet';

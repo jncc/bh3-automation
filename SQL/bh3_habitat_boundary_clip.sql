@@ -319,27 +319,27 @@ Approach:
 The AOI polygon/s is/are split into smaller parts with no more than 256 vertices each. These smaller parts are spatially joined to the habitat table 
 and the intersection of overlapping polygons is computed. The resulting polygons are then aggregated by the gid of the original habitat records, 
 computing the union of the pieces of the original polygons.
-Despite the extra steps and multiple geometry repairs between them, this is substantially faster than computing intersections directly with the 
+Despite the extra steps and multiple geometry repairs between them, this is substantially faster than computing intersections directly with 
 large boundary polygons.
 
 Parameters:
-boundary_filter: gid of the boundary polygon that delimits the AOI.
-habitat_types_filter: list of EUNIS L3 codes to be included or excluded.
-output_schema: Schema of the output habitat sensitivity table.
-output_table: Name of the output habitat sensitivity table. Defaults to ''habitat_sensitivity''.
-habitat_schema: Schema of the habitat table. Defaults to ''static''.
-habitat_table: Name of the habitat table. Defaults to ''uk_habitat_map_wgs84''.
-sensitivity_schema: Schema of the habitat sensitvity lookup table. Defaults to ''lut''.
-sensitivity_table name: name of the habitat sensitvity lookup table. Defaults to ''sensitivity_broadscale_habitats''.
-boundary_schema: Schema of the boundary table defining the AOI. Defaults to ''static''.
-boundary_table: Name of the boundary table defining the AOI. Defaults to ''official_country_waters_wgs84''.
-boundary_filter_negate: If false, the polygon identified by boundary_filter defines the AOI. Otherwise the AOI is defined by all but that polygon. Defaults to false.
-habitat_types_filter_negate: If false, the EUNIS L3 codes in habitat_types_filter are included, if true they are excluded. Defaults to false.
-exclude_empty_mismatched_eunis_l3: Controls whether habitats whose EUNIS L3 code is not matched in sensitivity_table are excluded (true) or included (false). Defaults to true.
-remove_overlaps: Controls whether bh3_habitat_remove_overlaps is called to remove overlaps from output_table. Defaults to false.
-																								  
+boundary_filter						integer					gid of the boundary polygon that delimits the AOI.
+habitat_types_filter				character varying[]		Array of EUNIS L3 codes to be included or excluded.
+output_schema						name					Schema of the output habitat sensitivity table.
+output_table						name					Name of the output habitat sensitivity table. Defaults to ''habitat_sensitivity''.
+habitat_schema						name					Schema of the habitat table. Defaults to ''static''.
+habitat_table						name					Name of the habitat table. Defaults to ''uk_habitat_map_wgs84''.
+sensitivity_schema					name					Schema of the habitat sensitvity lookup table. Defaults to ''lut''.
+sensitivity_table					name					Name of the habitat sensitvity lookup table. Defaults to ''sensitivity_broadscale_habitats''.
+boundary_schema						name					Schema of the boundary table defining the AOI. Defaults to ''static''.
+boundary_table						name					Name of the boundary table defining the AOI. Defaults to ''official_country_waters_wgs84''.
+boundary_filter_negate				boolean					If false, the polygon identified by boundary_filter defines the AOI. Otherwise the AOI is defined by all but that polygon. Defaults to false.
+habitat_types_filter_negate			boolean					If false, the EUNIS L3 codes in habitat_types_filter are included, if true they are excluded. Defaults to false.
+exclude_empty_mismatched_eunis_l3	boolean					Controls whether habitats whose EUNIS L3 code is not matched in sensitivity_table are excluded (true) or included (false). Defaults to true.
+remove_overlaps						boolean					Controls whether bh3_habitat_remove_overlaps is called to remove overlaps from output_table. Defaults to false.
+
 Returns:
-Single error record.
+A single error record. If execution succeeds its success field will be true and the remaining fields will be empty.
 
 Calls:
 bh3_drop_temp_table

@@ -5,7 +5,8 @@
 CREATE OR REPLACE FUNCTION public.bh3_get_pressure_csquares_size(
 	pressure_schema name,
 	date_start timestamp without time zone,
-	date_end timestamp without time zone DEFAULT now(),
+	date_end timestamp without time zone DEFAULT now(
+	),
 	sar_surface_column name DEFAULT 'sar_surface'::name,
 	sar_subsurface_column name DEFAULT 'sar_subsurface'::name,
 	output_srid integer DEFAULT 4326)
@@ -130,15 +131,15 @@ The polygons are expected to be squares of equal size. The average width/height 
 than 0.00000001.
 
 Parameters:
-pressure_schema: name of the schema that holds the pressure tables.
-date_start: earliest date for squares to be included.
-date_end: latest  date for squares to be included.
-sar_surface_column: name of the surface SAR column. Defaults to ''sar_surface''.
-sar_subsurface_column: name of the sub-surface SAR column. Defaults to ''sar_subsurface''.
-output_srid: SRID of spatial reference system in which c-squares are to be measured. Defaults to 4326.
+pressure_schema			name							Name of the schema that holds the pressure tables.
+date_start				timestamp without time zone		Earliest date for squares to be included.
+date_end				timestamp without time zone		Latest  date for squares to be included. Defaults to current date and time.
+sar_surface_column		name							Name of the surface SAR column. Defaults to ''sar_surface''.
+sar_subsurface_column	name							Name of the sub-surface SAR column. Defaults to ''sar_subsurface''.
+output_srid				integer 						SRID of spatial reference system in which c-squares are to be measured. Defaults to 4326.
 
 Returns:
-Cell size in the units of the spatial reference system identified by output_srid (normally degrees)
+Cell size in the units of the spatial reference system identified by output_srid (normally degrees).
 
 Calls:
-No nested calls';
+bh3_find_srid';

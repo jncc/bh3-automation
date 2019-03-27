@@ -8,7 +8,8 @@ CREATE OR REPLACE FUNCTION public.bh3_sensitivity_layer_prep(
 	boundary_filter integer,
 	sensitivity_source_table sensitivity_source,
 	date_start timestamp without time zone,
-	date_end timestamp without time zone DEFAULT now(),
+	date_end timestamp without time zone DEFAULT now(
+	),
 	habitat_types_filter character varying[] DEFAULT NULL::character varying[],
 	habitat_table name DEFAULT 'habitat_sensitivity'::name,
 	habitat_table_grid name DEFAULT 'habitat_sensitivity_grid'::name,
@@ -60,7 +61,7 @@ BEGIN
 		/* remove any previous species clipped temporary table left behind */
 		CALL bh3_drop_temp_table(species_clip_table);
 
-		RAISE INFO 'bh3_habitat_boundary_clip: Dropped any previous outputs left behind: %', (clock_timestamp() - start_time);
+		RAISE INFO 'bh3_sensitivity_layer_prep: Dropped any previous outputs left behind: %', (clock_timestamp() - start_time);
 
 		start_time := clock_timestamp();
 
@@ -90,7 +91,7 @@ BEGIN
 			output_srid;
 
 		GET DIAGNOSTICS rows_affected = ROW_COUNT;
-		RAISE INFO 'bh3_habitat_boundary_clip: Inserted % rows into temporary table %: %', 
+		RAISE INFO 'bh3_sensitivity_layer_prep: Inserted % rows into temporary table %: %', 
 			rows_affected, species_clip_table, (clock_timestamp() - start_time);
 
 		start_time := clock_timestamp();
@@ -100,7 +101,7 @@ BEGIN
 		EXECUTE format('CREATE INDEX idx_%1$s_sensitivity_ab_su_num ON %1$I USING BTREE(sensitivity_ab_su_num)', species_clip_table);
 		EXECUTE format('CREATE INDEX idx_%1$s_sensitivity_ab_ss_num ON %1$I USING BTREE(sensitivity_ab_ss_num)', species_clip_table);
 
-		RAISE INFO 'bh3_habitat_boundary_clip: Indexed temporary table %: %', 
+		RAISE INFO 'bh3_sensitivity_layer_prep: Indexed temporary table %: %', 
 			species_clip_table, (clock_timestamp() - start_time);
 
 		start_time := clock_timestamp();
@@ -168,7 +169,7 @@ BEGIN
 					   geom_exp_hab, output_schema, output_table_max);
 
 		GET DIAGNOSTICS rows_affected = ROW_COUNT;
-		RAISE INFO 'bh3_habitat_boundary_clip: Inserted % rows into output table %.%: %', 
+		RAISE INFO 'bh3_sensitivity_layer_prep: Inserted % rows into output table %.%: %', 
 			rows_affected, output_schema, output_table_max, (clock_timestamp() - start_time);
 
 		start_time := clock_timestamp();
@@ -187,7 +188,7 @@ BEGIN
 		EXECUTE format('CREATE INDEX idx_%2$I_sensitivity_ab_ss_num ON %1$I.%2$I USING BTREE(sensitivity_ab_ss_num)',
 					   output_schema, output_table_max);
 
-		RAISE INFO 'bh3_habitat_boundary_clip: Indexed output table %.%: %', 
+		RAISE INFO 'bh3_sensitivity_layer_prep: Indexed output table %.%: %', 
 			output_schema, output_table_max, (clock_timestamp() - start_time);
 
 		start_time := clock_timestamp();
@@ -298,7 +299,7 @@ BEGIN
 					   output_schema, output_table_mode, transform_exp);
 
 		GET DIAGNOSTICS rows_affected = ROW_COUNT;
-		RAISE INFO 'bh3_habitat_boundary_clip: Inserted % rows into output table %.%: %', 
+		RAISE INFO 'bh3_sensitivity_layer_prep: Inserted % rows into output table %.%: %', 
 			rows_affected, output_schema, output_table_mode, (clock_timestamp() - start_time);
 
 		start_time := clock_timestamp();
@@ -317,7 +318,7 @@ BEGIN
 		EXECUTE format('CREATE INDEX idx_%2$I_sensitivity_ab_ss_num ON %1$I.%2$I USING BTREE(sensitivity_ab_ss_num)',
 					   output_schema, output_table_mode);
 
-		RAISE INFO 'bh3_habitat_boundary_clip: Indexed output table %.%: %', 
+		RAISE INFO 'bh3_sensitivity_layer_prep: Indexed output table %.%: %', 
 			output_schema, output_table_mode, (clock_timestamp() - start_time);
 
 		start_time := clock_timestamp();
@@ -337,3 +338,44 @@ $BODY$;
 
 ALTER FUNCTION public.bh3_sensitivity_layer_prep(name, name, integer, sensitivity_source, timestamp without time zone, timestamp without time zone, character varying[], name, name, name, name, name, name, boolean, boolean, integer)
     OWNER TO postgres;
+
+COMMENT ON FUNCTION public.bh3_sensitivity_layer_prep(name, name, integer, sensitivity_source, timestamp without time zone, timestamp without time zone, character varying[], name, name, name, name, name, name, boolean, boolean, integer)
+    IS 'Purpose:
+Creates the sensitivity maximum and mode tables from the habitat table and Marine Recorder species sensitivity rows for the specified time period 
+and habitats within the specified boundary polygon(s).
+
+Approach:
+Retrieves Marine Recorder species sensitivity rows for the specified time period and habitats and clips them by the boundary polygon(s).
+Creates the output sensitivity maximum table and populates it by joining the habitat table to the clipped species sensitivity table, aggregating by 
+the habitat table gid, inserting the maximum surface and sub-surface abrasion sensitivity and number of samples plus the habitat table''s maximum 
+surface and sub-surface sensitivity and confidence scores into the output sensitivity maximum table.
+Creates the output sensitivity mode table and populates it by joining the habitat table to the clipped species sensitivity table, separately counting 
+the total number of samples as well as counting and ranking the frequencies of all different surface and sub-surface abrasion sensitivity scores, 
+aggregating by habitat table gid, and inserting the top ranked rows plus the habitat table''s maximum surface and sub-surface sensitivity and confidence scores 
+into the output sensitivity mode table provided the number of samples divided by the polygon area in square metres is at least 0.00000005.
+
+Parameters:
+habitat_schema				name							Schema of input habitat_table.
+output_schema				name							Schema in which output tables will be created (will be created if it does not already exist; tables in it will be overwritten).
+boundary_filter				integer							gid of AOI polygon in boundary_table to be included (or excluded if boundary_filter_negate is true).
+sensitivity_source_table	sensitivity_source				Source table for habitat sensitivity scores (enum value one of { ''broadscale_habitats'', ''eco_groups'', ''rock'', ''rock_eco_groups'' }).
+date_start					timestamp without time zone		Earliest date for Marine Recorder spcies samples to be included.
+date_end					timestamp without time zone		Latest date for Marine Recorder species samples and pressure data to be included. Defaults to current date and time.
+habitat_types_filter		character varying[]				Array of eunis_l3 codes of habitats in habitat_table to be included (or excluded if habitat_types_filter_negate is true).
+habitat_table				name							Name of habitat sensitivity output table. Defaults to ''habitat_sensitivity''.
+habitat_table_grid			name							Name of gridded habitat sensitivity output table. Defaults to ''habitat_sensitivity_grid''.
+output_table_max			name							Table name of species sensitivity maximum map. Defaults to ''species_sensitivity_max''.
+output_table_mode			name							Table name of species sensitivity mode map. Defaults to ''species_sensitivity_mode''.
+boundary_schema				name							Schema of table containing AOI boundary polygons. Defaults to ''static''.
+boundary_table				name							Name of table containing AOI boundary polygons. Defaults to ''official_country_waters_wgs84''.
+boundary_filter_negate		boolean							If true condition built with boundary_filter is to be negated, i.e. AOI is all but the polygon identified by boundary_filter. Defaults to false.
+habitat_types_filter_negate	boolean							If true condition built with habitat_types_filter is to be negated, i.e. EUNIS L3 codes in habitat_types_filter will be excluded. Defaults to false.
+output_srid					integer							SRID of output tables (reprojecting greatly affects performance). Defaults to 4326.
+
+Returns:
+A single error record. If execution succeeds its success field will be true and the remaining fields will be empty.
+
+Calls:
+bh3_drop_temp_table
+bh3_find_srid
+bh3_species_sensitivity_clipped.';

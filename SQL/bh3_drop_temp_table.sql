@@ -28,3 +28,16 @@ BEGIN
 	END IF;
 END;
 $BODY$;
+
+COMMENT ON PROCEDURE public.bh3_drop_temp_table
+    IS 'Purpose:
+Drops a temporary table if it exists.
+
+Approach:
+Looks up the temporary table''s schema in database metadata and drop it using a qualified name.
+
+Parameters:
+table_name		name	Name of temporary table to be dropped.
+
+Calls:
+No nested calls.';

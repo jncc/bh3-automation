@@ -9,28 +9,12 @@ CREATE OR REPLACE FUNCTION public.bh3_species_sensitivity_clipped(
 	sensitivity_source_table sensitivity_source,
 	date_start timestamp without time zone,
 	habitat_types_filter character varying[] DEFAULT NULL::character varying[],
-	date_end timestamp without time zone DEFAULT now(),
+	date_end timestamp without time zone DEFAULT now(
+	),
 	boundary_filter_negate boolean DEFAULT false,
 	habitat_types_filter_negate boolean DEFAULT false,
 	output_srid integer DEFAULT 4326)
-    RETURNS TABLE(
-		gid bigint,
-		the_geom geometry,
-		survey_key character varying,
-		survey_event_key character varying,
-		sample_reference character varying,
-		sample_date timestamp with time zone,
-		biotope_code character varying,
-		biotope_desc text,
-		qualifier character varying,
-		eunis_code_2007 character varying,
-		eunis_name_2007 character varying,
-		annex_i_habitat character varying,
-		characterising_species character varying,
-		sensitivity_ab_su_num smallint,
-		confidence_ab_su_num smallint,
-		sensitivity_ab_ss_num smallint,
-		confidence_ab_ss_num smallint) 
+    RETURNS TABLE(gid bigint, the_geom geometry, survey_key character varying, survey_event_key character varying, sample_reference character varying, sample_date timestamp with time zone, biotope_code character varying, biotope_desc text, qualifier character varying, eunis_code_2007 character varying, eunis_name_2007 character varying, annex_i_habitat character varying, characterising_species character varying, sensitivity_ab_su_num smallint, confidence_ab_su_num smallint, sensitivity_ab_ss_num smallint, confidence_ab_ss_num smallint) 
     LANGUAGE 'plpgsql'
 
     COST 100
@@ -110,3 +94,31 @@ $BODY$;
 
 ALTER FUNCTION public.bh3_species_sensitivity_clipped(name, name, integer, sensitivity_source, timestamp without time zone, character varying[], timestamp without time zone, boolean, boolean, integer)
     OWNER TO postgres;
+
+COMMENT ON FUNCTION public.bh3_species_sensitivity_clipped(name, name, integer, sensitivity_source, timestamp without time zone, character varying[], timestamp without time zone, boolean, boolean, integer)
+    IS 'Purpose:
+Creates a table of species sensitivity rows within the specified boundary polygon(s).
+
+Approach:
+Selects rows from a hard coded join of Marine Recorder tables (marinerec.survey srv, marinerec.survey_event, marinerec.sample,
+marinerec.sample_species, marinerec.sample_biotope_all) and lut.eunis_correlation_table with the specified sensitivity table within
+the specified boundary polygon(s).
+
+Parameters:
+boundary_schema					name							Schema of table containing AOI boundary polygons. Defaults to ''static''.
+boundary_table					name							Name of table containing AOI boundary polygons. Defaults to ''official_country_waters_wgs84''.
+boundary_filter					integer							gid of AOI polygon in boundary_table to be included (or excluded if boundary_filter_negate is true).
+sensitivity_source_table		sensitivity_source				Source table for habitat sensitivity scores (enum value one of { ''broadscale_habitats'', ''eco_groups'', ''rock'', ''rock_eco_groups'' }).
+date_start						timestamp without time zone		Earliest date for Marine Recorder spcies samples to be included.
+habitat_types_filter			character varying[]				Array of eunis_l3 codes of habitats in habitat_table to be included (or excluded if habitat_types_filter_negate is true).
+date_end						timestamp without time zone		Latest date for Marine Recorder species samples and pressure data to be included. Defaults to current date and time.
+boundary_filter_negate			boolean							If true condition built with boundary_filter is to be negated, i.e. AOI is all but the polygon identified by boundary_filter. Defaults to false.
+habitat_types_filter_negate		boolean							If true condition built with habitat_types_filter is to be negated, i.e. EUNIS L3 codes in habitat_types_filter will be excluded. Defaults to false.
+output_srid						integer							SRID of output tables (reprojecting greatly affects performance). Defaults to 4326.
+
+Returns:
+An in-memory table of species sensitivity rows.
+
+Calls:
+bh3_find_srid
+bh3_sensitivity';

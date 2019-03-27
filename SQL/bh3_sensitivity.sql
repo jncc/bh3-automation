@@ -4,14 +4,7 @@
 
 CREATE OR REPLACE FUNCTION public.bh3_sensitivity(
 	source_table sensitivity_source)
-    RETURNS TABLE(
-		eunis_l3_code character varying,
-		eunis_l3_name text,
-		characterising_species character varying,
-		sensitivity_ab_su_num smallint,
-		sensitivity_ab_ss_num smallint,
-		confidence_ab_su_num smallint,
-		confidence_ab_ss_num smallint) 
+    RETURNS TABLE(eunis_l3_code character varying, eunis_l3_name text, characterising_species character varying, sensitivity_ab_su_num smallint, sensitivity_ab_ss_num smallint, confidence_ab_su_num smallint, confidence_ab_ss_num smallint) 
     LANGUAGE 'plpgsql'
 
     COST 100
@@ -69,3 +62,19 @@ $BODY$;
 
 ALTER FUNCTION public.bh3_sensitivity(sensitivity_source)
     OWNER TO postgres;
+
+COMMENT ON FUNCTION public.bh3_sensitivity(sensitivity_source)
+    IS 'Purpose:
+Retrieves sensitivity rows from the specified table.
+
+Approach:
+Performs a select query against the specified source table standardising the return table''s schema.
+
+Parameters:
+source_table	sensitivity_source		Source table for habitat sensitivity scores (enum value one of { ''broadscale_habitats'', ''eco_groups'', ''rock'', ''rock_eco_groups'' }).
+
+Returns:
+An in-memory table of sensitivity rows with standardised schema.
+
+Calls:
+No nested calls.';

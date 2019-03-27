@@ -33,3 +33,19 @@ BEGIN
 	END IF;
 END;
 $BODY$;
+
+COMMENT ON PROCEDURE public.bh3_repair_geometries
+    IS 'Purpose:
+Repairs the geometries in the specified column of a table and converts them to multi geometries. 
+
+Approach:
+Uses a zero buffer to repair geometries. Geometries that are part of a collection are repaired individually.
+Repaired geometries are converted to their corresponding multi types. 
+
+Parameters:
+schema_name		name	Schema name of geometry table.
+table_name		name	Table name of geometry table.
+geom_column		name	Geometry column name. Defaults to ''the_geom''.
+
+Calls:
+No nested calls';

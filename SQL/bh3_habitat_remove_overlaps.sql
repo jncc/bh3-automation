@@ -391,3 +391,27 @@ $BODY$;
 
 ALTER FUNCTION public.bh3_habitat_remove_overlaps(name, name)
     OWNER TO postgres;
+
+COMMENT ON FUNCTION public.bh3_habitat_remove_overlaps(name, name)
+    IS 'Purpose:
+Removes overlapping polygons from the input habitat sensitivity table.
+
+Approach:
+First, the input habitat_sensitivity table is spatially self-joined intersecting overlapping geometries into a temporary table 
+combining attributes from both left and right sides of the join. The resulting joined row set is then split into its constituent rows 
+each of which is one overlapping geometry with its original attributes. Any duplicate overlaps in this split row set are ranked by 
+sensitivity and confidence keeping only top ranked rows. The unique overlapping polygons in this last row set are then erased from the 
+input habitat sensitivity table. Finally, the resulting set of input habitat sensitivity table rows with overlaps removed and the set of overlapping 
+polygons with the highest sensitivity/confidence are merged using a union query and the resulting rows are inserted into the previously emptied 
+input habitat_sensitivity table.
+
+Parameters:
+habitat_sensitivity_schema		name		Schema of the input habitat sensitivity table.
+habitat_sensitivity_table		name		Name of the input habitat sensitivity table.
+
+Returns:
+A single error record. If execution succeeds its success field will be true and the remaining fields will be empty.
+
+Calls:
+bh3_drop_temp_table
+bh3_repair_geometries';

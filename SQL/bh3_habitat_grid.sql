@@ -12,11 +12,7 @@ CREATE OR REPLACE FUNCTION public.bh3_habitat_grid(
 	boundary_table name DEFAULT 'official_country_waters_wgs84'::name,
 	boundary_filter_negate boolean DEFAULT false,
 	cell_size_degrees numeric DEFAULT 0.05)
-    RETURNS TABLE(
-		gid bigint,
-		exc_text character varying,
-		exc_detail character varying,
-		exc_hint character varying) 
+    RETURNS TABLE(gid bigint, exc_text character varying, exc_detail character varying, exc_hint character varying) 
     LANGUAGE 'plpgsql'
 
     COST 100
@@ -200,3 +196,30 @@ $BODY$;
 
 ALTER FUNCTION public.bh3_habitat_grid(integer, name, name, name, name, name, name, boolean, numeric)
     OWNER TO postgres;
+
+COMMENT ON FUNCTION public.bh3_habitat_grid(integer, name, name, name, name, name, name, boolean, numeric)
+    IS 'Purpose:
+Creates a gridded version of the habitat_sensitivity_table.
+
+Approach:
+Creates a c-square grid table within the specified boundary and intersects it with polygons from the previously created, 
+ungridded habitat_sensitivity_table, calling the fast ST_ClipByBox2D in a loop over a cursor. 
+
+Parameters:
+boundary_filter				integer		gid of the boundary polygon that delimits the AOI.
+habitat_sensitivity_schema	name		Schema of the habitat sensitivity table.
+output_schema				name		Schema of the output gridded habitat sensitivity table.
+habitat_sensitivity_table	name		Name of habitat sensitivity table. Defaults to ''habitat_sensitivity''.
+output_table				name		Name of gridded habitat sensitivity output table. Defaults to ''habitat_sensitivity_grid''.
+boundary_schema				name		Schema of table containing AOI boundary polygons. Defaults to ''static''.
+boundary_table				name		Name of table containing AOI boundary polygons. Defaults to ''official_country_waters_wgs84''.
+boundary_filter_negate		boolean		If true condition built with boundary_filter is to be negated, i.e. AOI is all but the polygon identified by boundary_filter. Defaults to false.
+cell_size_degrees			numeric		Cell size in degrees. Defaults to 0.05.
+
+Returns:
+Table of error records from cursor loop.
+
+Calls:
+bh3_drop_temp_table
+bh3_find_srid
+bh3_create_csquares';

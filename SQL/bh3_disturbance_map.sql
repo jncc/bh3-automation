@@ -15,13 +15,10 @@ CREATE OR REPLACE FUNCTION public.bh3_disturbance_map(
 	sar_surface_column name DEFAULT 'sar_surface'::name,
 	sar_subsurface_column name DEFAULT 'sar_subsurface'::name,
 	boundary_filter_negate boolean DEFAULT false,
-	date_end timestamp without time zone DEFAULT now(),
+	date_end timestamp without time zone DEFAULT now(
+	),
 	output_srid integer DEFAULT 4326)
-    RETURNS TABLE(
-		gid bigint,
-		exc_text character varying,
-		exc_detail character varying,
-		exc_hint character varying) 
+    RETURNS TABLE(gid bigint, exc_text character varying, exc_detail character varying, exc_hint character varying) 
     LANGUAGE 'plpgsql'
 
     COST 100
@@ -282,3 +279,38 @@ $BODY$;
 
 ALTER FUNCTION public.bh3_disturbance_map(integer, timestamp without time zone, name, name, name, name, name, name, name, name, name, boolean, timestamp without time zone, integer)
     OWNER TO postgres;
+
+COMMENT ON FUNCTION public.bh3_disturbance_map(integer, timestamp without time zone, name, name, name, name, name, name, name, name, name, boolean, timestamp without time zone, integer)
+    IS 'Purpose:
+Creates the disturbance map from sensitivity and pressure maps.
+
+Approach:
+Creates a table of pressure c-squares calling the bh3_get_pressure_csquares function.
+Then, using a cursor, the disturbance map table is populated computing surface and subsurface disturbance scores 
+surface and subsurface abrasion sensitivity scores from the sensitivity map with categorised combined surface and 
+sub-surface abrasion scores from the pressure c-squares using case expressions and a geometry as the intersection 
+of sensitivity and pressure c-square geometries.
+
+Parameters:
+boundary_filter			integer							gid of AOI polygon in boundary_table to be included (or excluded if boundary_filter_negate is true).
+date_start				timestamp without time zone		Earliest date for Marine Recorder spcies samples to be included.
+pressure_schema			name							Schema in which pressure source tables are located (all tables in this schema that have the required columns will be used).
+sensitivity_map_schema	name							Schema in which sensitivity map table is located.
+output_schema			name							Schema in which output tables will be created (will be created if it does not already exist; tables in it will be overwritten).
+boundary_schema			name							Schema of table containing AOI boundary polygons. Defaults to ''static''.
+boundary_table			name							Name of table containing AOI boundary polygons. Defaults to ''official_country_waters_wgs84''.
+sensitivity_map_table	name							Table name of sensitivity map. Defaults to ''sensitivity_map''.
+output_table			name							Table name of output disturbance map. Defaults to ''disturbance_map''.
+sar_surface_column		name							SAR surface column name in pressure source tables. Defaults to ''sar_surface''.
+sar_subsurface_column	name							SAR sub-surface column name in pressure source tables. Defaults to ''sar_subsurface''.
+boundary_filter_negate	boolean							If true condition built with boundary_filter is to be negated, i.e. AOI is all but the polygon identified by boundary_filter. Defaults to false.
+date_end				timestamp without time zone		Latest date for Marine Recorder species samples and pressure data to be included. Defaults to current date and time.
+output_srid				integer							SRID of output tables (reprojecting greatly affects performance). Defaults to 4326.
+
+Returns:
+Table of error records from cursor loop.
+
+Calls:
+bh3_drop_temp_table
+bh3_get_pressure_csquares
+bh3_find_srid';

@@ -23,7 +23,8 @@ CREATE OR REPLACE PROCEDURE public.bh3_procedure(
 	disturbance_map_table name DEFAULT 'disturbance_map'::name,
 	sar_surface_column name DEFAULT 'sar_surface'::name,
 	sar_subsurface_column name DEFAULT 'sar_subsurface'::name,
-	date_end timestamp without time zone DEFAULT now(),
+	date_end timestamp without time zone DEFAULT now(
+	),
 	boundary_filter_negate boolean DEFAULT false,
 	habitat_types_filter_negate boolean DEFAULT false,
 	remove_overlaps boolean DEFAULT false,
@@ -295,28 +296,46 @@ END;
 $BODY$;
 
 COMMENT ON PROCEDURE public.bh3_procedure
-    IS 'boundary_filter					gid of AOI polygon in boundary_tableto be included (or excluded if boundary_filter_negate is true)
-habitat_types_filter				eunis_l3 codes of habitats in habitat_table to be included (or excluded if habitat_types_filter_negate is true)
-date_start							earliest date for Marine Recorder spcies samples to be included
-species_sensitivity_source_table	source table for habitat sensitivity scoees (enum value)
-pressure_schema						schema in which pressure source tables are located (all tables in this schema that have the required columns will be used)
-output_schema name					schema in which output tables will be created (will be created if it does not already exist; tables in it will be overwritten)
-boundary_schema						schema of table containing AOI boundary polygons
-boundary_table						name of table containing AOI boundary polygons
-habitat_schema						habitat table schema
-habitat_table						habitat table name
-habitat_sensitivity_lookup_schema	schema of habitat sensitivity lookup table
-habitat_sensitivity_lookup_table	name of habitat sensitivity lookup table
-habitat_sensitivity_table			name of habitat sensitivity output table
-habitat_sensitivity_grid_table		name of gridded habitat sensitivity output table
-species_sensitivity_max_table		table name of species sensitivity maximum map
-species_sensitivity_mode_table		table name of species sensitivity mode map
-sensitivity_map_table				table name of output sensitivity map
-disturbance_map_table				table name of output pressure map
-sar_surface_column					SAR surface column name in pressure source tables
-sar_subsurface_column				SAR sub-surface column name in pressure source tables
-date_end							latest date for Marine Recorder species samples and pressure data to be included
-boundary_filter_negate				if true condition built with boundary_filter is to be negated, i.e. AOI is all but the poygon identified by boundary_filter
-habitat_types_filter_negate			if true condition built with habitat_types_filter is to be negated, i.e. EUNIS L3 codes in habitat_types_filter will be excluded
-remove_overlaps						if true overlaps will be removed from habitat_sensitivity_table (significantly increases processing time)
-output_srid							SRID of output tables (reprojecting greatly affects performance)';
+    IS 'Purpose:
+Main entry point that starts a BH3 run. 
+This is called by the QGIS user interface and may be executed directly in pgAdmin or on the PostgreSQL command line.
+
+Approach:
+Creates the output schema and an error_log table in it if they do not already exist.
+Then calls the bh3_get_pressure_csquares_size, bh3_habitat_boundary_clip, bh3_habitat_grid, bh3_sensitivity_layer_prep, 
+bh3_sensitivity_map and bh3_disturbance_map functions, inserting any error rows returned into the error_log table.
+
+Parameters:
+boundary_filter						integer							gid of AOI polygon in boundary_table to be included (or excluded if boundary_filter_negate is true).
+habitat_types_filter				character varying[]				Array of eunis_l3 codes of habitats in habitat_table to be included (or excluded if habitat_types_filter_negate is true).
+date_start							timestamp without time zone		Earliest date for Marine Recorder spcies samples to be included.
+species_sensitivity_source_table	sensitivity_source				Source table for habitat sensitivity scores (enum value one of { ''broadscale_habitats'', ''eco_groups'', ''rock'', ''rock_eco_groups'' }).
+pressure_schema						name							Schema in which pressure source tables are located (all tables in this schema that have the required columns will be used).
+output_schema						name							Schema in which output tables will be created (will be created if it does not already exist; tables in it will be overwritten).
+boundary_schema						name							Schema of table containing AOI boundary polygons. Defaults to ''static''.
+boundary_table						name							Name of table containing AOI boundary polygons. Defaults to ''official_country_waters_wgs84''.
+habitat_schema						name							Habitat table schema. Defaults to ''static''.
+habitat_table						name							Habitat table name. Defaults to ''uk_habitat_map_wgs84''.
+habitat_sensitivity_lookup_schema	name							Schema of habitat sensitivity lookup table. Defaults to ''lut''.
+habitat_sensitivity_lookup_table	name							Name of habitat sensitivity lookup table. Defaults to ''sensitivity_broadscale_habitats''.
+habitat_sensitivity_table			name							Name of habitat sensitivity output table. Defaults to ''habitat_sensitivity''.
+habitat_sensitivity_grid_table		name							Name of gridded habitat sensitivity output table. Defaults to ''habitat_sensitivity_grid''.
+species_sensitivity_max_table		name							Table name of species sensitivity maximum map. Defaults to ''species_sensitivity_max''.
+species_sensitivity_mode_table		name							Table name of species sensitivity mode map. Defaults to ''species_sensitivity_mode''.
+sensitivity_map_table				name							Table name of output sensitivity map. Defaults to ''sensitivity_map''.
+disturbance_map_table				name							Table name of output disturbance map. Defaults to ''disturbance_map''.
+sar_surface_column					name							SAR surface column name in pressure source tables. Defaults to ''sar_surface''.
+sar_subsurface_column				name							SAR sub-surface column name in pressure source tables. Defaults to ''sar_subsurface''.
+date_end							timestamp without time zone		Latest date for Marine Recorder species samples and pressure data to be included. Defaults to current date and time.
+boundary_filter_negate				boolean							If true condition built with boundary_filter is to be negated, i.e. AOI is all but the polygon identified by boundary_filter. Defaults to false.
+habitat_types_filter_negate			boolean							If true condition built with habitat_types_filter is to be negated, i.e. EUNIS L3 codes in habitat_types_filter will be excluded. Defaults to false.
+remove_overlaps						boolean							If true overlaps will be removed from habitat_sensitivity_table (significantly increases processing time). Defaults to false.
+output_srid							integer							SRID of output tables (reprojecting greatly affects performance). Defaults to 4326.
+
+Calls:
+bh3_get_pressure_csquares_size
+bh3_habitat_boundary_clip
+bh3_habitat_grid
+bh3_sensitivity_layer_prep
+bh3_sensitivity_map
+bh3_disturbance_map';

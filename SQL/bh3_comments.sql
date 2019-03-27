@@ -1,3 +1,37 @@
+CREATE OR REPLACE PROCEDURE public.bh3_repair_geometries(
+	schema_name name,
+	table_name name,
+	geom_column name DEFAULT 'the_geom'::name)
+LANGUAGE 'plpgsql'
+
+AS $BODY$
+BEGIN
+	IF length(coalesce(table_name, '')) > 0 AND length(coalesce(geom_column, '')) > 0 THEN
+		IF length(coalesce(schema_name, '')) > 0 THEN
+			EXECUTE format('UPDATE %1$I.%2$I '
+						   'SET %3$I = ST_MakeValid(ST_Multi(ST_Buffer('
+							   'CASE '
+								   'WHEN ST_IsCollection(%3$I) THEN ST_CollectionExtract(ST_MakeValid(%3$I),3) '
+								   'ELSE ST_MakeValid(%3$I) '
+							   'END, 0))) '
+						   'WHERE NOT ST_IsValid(%3$I) OR NOT ST_IsSimple(%3$I) OR ST_IsCollection(%3$I)',
+						   schema_name, table_name, geom_column);
+		ELSE
+			EXECUTE format('UPDATE %1$I '
+						   'SET %2$I = ST_MakeValid(ST_Multi(ST_Buffer('
+							   'CASE '
+								   'WHEN ST_IsCollection(%2$I) THEN ST_CollectionExtract(ST_MakeValid(%2$I),3) '
+								   'ELSE ST_MakeValid(%2$I) '
+							   'END, 0))) '
+						   'WHERE NOT ST_IsValid(%2$I) OR NOT ST_IsSimple(%2$I) OR ST_IsCollection(%2$I)',
+						   table_name, geom_column);
+		END IF;
+	END IF;
+END;
+$BODY$;
+
+
+
 CREATE OR REPLACE FUNCTION public.bh3_find_srid(
 	table_schema name,
 	table_name name,
@@ -38,6 +72,30 @@ BEGIN
 
 	RETURN srid;
 END;
+$BODY$;
+
+
+
+CREATE OR REPLACE FUNCTION public.bh3_safe_difference(
+	geom_from geometry,
+	geom_erase geometry)
+    RETURNS geometry
+    LANGUAGE 'plpgsql'
+
+    COST 100
+    STABLE STRICT 
+AS $BODY$
+BEGIN
+    RETURN ST_Difference(geom_from, geom_erase);
+    EXCEPTION
+        WHEN OTHERS THEN
+            BEGIN
+                RETURN ST_Difference(ST_Buffer(geom_from, 0.0000001), ST_Buffer(geom_erase, 0.0000001));
+                EXCEPTION
+                    WHEN OTHERS THEN
+                        RETURN ST_GeomFromText('POLYGON EMPTY');
+    END;
+END
 $BODY$;
 
 
@@ -557,7 +615,7 @@ BEGIN
 							   ',confidence_ab_ss_num'
 							   ',sensitivity_ab_su_num'
 							   ',sensitivity_ab_ss_num '
-						   'FROM %2$I.%4$I mod'
+						   'FROM %4$I mod'
 					   ') '
 					   'SELECT ROW_NUMBER() OVER() AS gid'
 						   ',gid_max'
@@ -573,7 +631,7 @@ BEGIN
 						   ',sensitivity_ab_ss_num '
 					   'FROM cte_union', 
 					   species_sensitivity_all_areas_table, species_sensitivity_schema, 
-					   species_sensitivity_max_table, species_sensitivity_mode_final_table);
+					   species_sensitivity_max_table, species_sensitivity_mode_final_table); --TODO: ln. 184 was: 'FROM %2$I.%4$I mod'
 
 		EXECUTE format('ALTER TABLE %1$I ADD CONSTRAINT %1$s_pkey PRIMARY KEY(gid)', 
 					   species_sensitivity_all_areas_table);
@@ -603,14 +661,14 @@ BEGIN
 					   '),'
 					   'cte_diff AS '
 					   '('
-						   'SELECT gid'
-							   ',hab_type'
-							   ',eunis_l3'
-							   ',sensitivity_ab_su_num_max'
-							   ',confidence_ab_su_num'
-							   ',sensitivity_ab_ss_num_max'
-							   ',confidence_ab_ss_num'
-							   ',ST_Difference(the_geom,ST_Union(the_geom_erase)) AS the_geom '
+					   		'SELECT gid'
+					   			',hab_type'
+					   			',eunis_l3'
+					   			',sensitivity_ab_su_num_max'
+					   			',confidence_ab_su_num'
+					   			',sensitivity_ab_ss_num_max'
+					   			',confidence_ab_ss_num'
+					   			',bh3_safe_difference(the_geom,ST_Union(the_geom_erase)) AS the_geom '
 						   'FROM cte_join '
 						   'WHERE the_geom_erase IS NOT NULL '
 						   'GROUP BY gid'
@@ -1216,3 +1274,24 @@ A single error record. If execution succeeds its success field will be true and 
 
 Calls:
 bh3_drop_temp_table';
+
+
+
+COMMENT ON FUNCTION public.bh3_safe_difference(geometry, geometry)
+    IS 'Purpose:
+Wrapper around ST_Difference with exception handling.
+
+Approach:
+Calls ST_Difference on the unaltered input parameters. 
+If it throws an exception it is called again on the input geometries buffered by 0.0000001.
+If that also fails an empty polygon is returned.
+
+Parameters:
+geom_from	geometry	Geometry from which to erase geom_erase (first parameter passed into ST_Difference).
+geom_erase	geometry	Geometry to erase from geom_from (second parameter passed into ST_Difference).
+
+Returns:
+ST_Difference of the two (possibly buffered) geometries, or if that fails an empty polygon.
+
+Calls:
+No nested calls.';

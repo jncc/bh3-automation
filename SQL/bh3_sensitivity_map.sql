@@ -181,7 +181,7 @@ BEGIN
 							   ',confidence_ab_ss_num'
 							   ',sensitivity_ab_su_num'
 							   ',sensitivity_ab_ss_num '
-						   'FROM %2$I.%4$I mod'
+						   'FROM %4$I mod'
 					   ') '
 					   'SELECT ROW_NUMBER() OVER() AS gid'
 						   ',gid_max'
@@ -197,7 +197,7 @@ BEGIN
 						   ',sensitivity_ab_ss_num '
 					   'FROM cte_union', 
 					   species_sensitivity_all_areas_table, species_sensitivity_schema, 
-					   species_sensitivity_max_table, species_sensitivity_mode_final_table);
+					   species_sensitivity_max_table, species_sensitivity_mode_final_table); --TODO: ln. 184 was: 'FROM %2$I.%4$I mod'
 
 		EXECUTE format('ALTER TABLE %1$I ADD CONSTRAINT %1$s_pkey PRIMARY KEY(gid)', 
 					   species_sensitivity_all_areas_table);
@@ -227,14 +227,14 @@ BEGIN
 					   '),'
 					   'cte_diff AS '
 					   '('
-						   'SELECT gid'
-							   ',hab_type'
-							   ',eunis_l3'
-							   ',sensitivity_ab_su_num_max'
-							   ',confidence_ab_su_num'
-							   ',sensitivity_ab_ss_num_max'
-							   ',confidence_ab_ss_num'
-							   ',ST_Difference(the_geom,ST_Union(the_geom_erase)) AS the_geom '
+					   		'SELECT gid'
+					   			',hab_type'
+					   			',eunis_l3'
+					   			',sensitivity_ab_su_num_max'
+					   			',confidence_ab_su_num'
+					   			',sensitivity_ab_ss_num_max'
+					   			',confidence_ab_ss_num'
+					   			',bh3_safe_difference(the_geom,ST_Union(the_geom_erase)) AS the_geom '
 						   'FROM cte_join '
 						   'WHERE the_geom_erase IS NOT NULL '
 						   'GROUP BY gid'

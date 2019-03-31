@@ -135,11 +135,11 @@ BEGIN
 
 		habitat_type_condition := '';
 		IF habitat_types_filter IS NOT NULL AND array_length(habitat_types_filter, 1) > 0 THEN
-			IF length(habitat_types) = 1 THEN
+			IF array_length(habitat_types_filter, 1) = 1 THEN
 				IF habitat_types_filter_negate THEN
-					habitat_type_condition := format('hab.%1$I != %1$L', 'eunis_l3', habitat_types[1]);
+					habitat_type_condition := format('hab.%1$I != %1$L', 'eunis_l3', habitat_types_filter[1]);
 				ELSE
-					habitat_type_condition := format('hab.%1$I = %1$L', 'eunis_l3', habitat_types[1]);
+					habitat_type_condition := format('hab.%1$I = %1$L', 'eunis_l3', habitat_types_filter[1]);
 				END IF;
 			ELSE
 				IF habitat_types_filter_negate THEN

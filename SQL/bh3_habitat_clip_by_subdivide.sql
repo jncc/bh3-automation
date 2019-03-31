@@ -151,11 +151,11 @@ BEGIN
 		/* build habitat filter condition avoiding array comparison if habitat_types_filter has single element */
 		habitat_type_where_clause := '';
 		IF habitat_types_filter IS NOT NULL AND array_length(habitat_types_filter, 1) > 0 THEN
-			IF length(habitat_types) = 1 THEN
+			IF array_length(habitat_types_filter, 1) = 1 THEN
 				IF habitat_types_filter_negate THEN
-					habitat_type_where_clause := format(' WHERE hab.%1$I != $2', 'eunis_l3', habitat_types[1]);
+					habitat_type_where_clause := format(' WHERE hab.%1$I != $2', 'eunis_l3', habitat_types_filter[1]);
 				ELSE
-					habitat_type_where_clause := format(' WHERE hab.%1$I = $2', 'eunis_l3', habitat_types[1]);
+					habitat_type_where_clause := format(' WHERE hab.%1$I = $2', 'eunis_l3', habitat_types_filter[1]);
 				END IF;
 			ELSE
 				IF habitat_types_filter_negate THEN

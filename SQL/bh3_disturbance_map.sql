@@ -98,6 +98,7 @@ BEGIN
 						   ',sensitivity_ab_ss_num smallint'
 						   ',disturbance_ab_su smallint'
 						   ',disturbance_ab_ss smallint'
+						   ',disturbance_ab smallint'
 						   ',area_sqm double precision'
 					   ')',
 					   output_schema, output_table, output_srid);
@@ -222,9 +223,10 @@ BEGIN
 								   ',sensitivity_ab_ss_num'
 								   ',disturbance_ab_su'
 								   ',disturbance_ab_ss'
+								   ',disturbance_ab'
 								   ',area_sqm'
 							   ') '
-							   'VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)', 
+							   'VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)', 
 							   output_schema, output_table)
 				USING cand_row.gid
 					,geom 
@@ -234,6 +236,7 @@ BEGIN
 					,cand_row.sensitivity_ab_ss_num
 					,cand_row.disturbance_ab_su
 					,cand_row.disturbance_ab_ss
+					,greatest(cand_row.disturbance_ab_su, cand_row.disturbance_ab_ss)
 					,area_sqm;
 			EXCEPTION WHEN OTHERS THEN
 				GET STACKED DIAGNOSTICS exc_text = MESSAGE_TEXT,

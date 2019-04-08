@@ -45,9 +45,9 @@ BEGIN
 	IF habitat_types_filter IS NOT NULL AND array_length(habitat_types_filter, 1) > 0 THEN
 		IF array_length(habitat_types_filter, 1) = 1 THEN
 			IF habitat_types_filter_negate THEN 
-				habitat_type_condition := format('AND ect.%1$I != $5', 'eunis_code_2004', habitat_types_filter[1]);
+				habitat_type_condition := format('AND ect.%1$I != %2$L', 'eunis_code_2004', habitat_types_filter[1]);
 			ELSE
-				habitat_type_condition := format('AND ect.%1$I = $5', 'eunis_code_2004', habitat_types_filter[1]);
+				habitat_type_condition := format('AND ect.%1$I = %2$L', 'eunis_code_2004', habitat_types_filter[1]);
 			END IF;
 		ELSE
 			IF habitat_types_filter_negate THEN
@@ -88,7 +88,7 @@ BEGIN
 									'AND smp.sample_date <= $4 '
 									'%5$s',
 								geom_exp_smp, boundary_schema, boundary_table, negation, habitat_type_condition)
-	USING sensitivity_source_table, boundary_filter, date_start, date_end, CASE WHEN true THEN habitat_types_filter ELSE NULL END;
+	USING sensitivity_source_table, boundary_filter, date_start, date_end, habitat_types_filter;
 END;
 $BODY$;
 

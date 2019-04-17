@@ -1,6 +1,65 @@
--- FUNCTION: public.bh3_sensitivity_map(name, name, name, name, name, name, name)
+DROP FUNCTION public.bh3_safe_difference(geometry, geometry);
 
--- DROP FUNCTION public.bh3_sensitivity_map(name, name, name, name, name, name, name);
+CREATE OR REPLACE FUNCTION public.bh3_safe_difference(
+	geom_from geometry,
+	geom_erase geometry,
+	tolerance double precision DEFAULT (
+	0.00000001)::double precision)
+    RETURNS geometry
+    LANGUAGE 'plpgsql'
+
+    COST 100
+    STABLE STRICT 
+AS $BODY$
+BEGIN
+    RETURN ST_Difference(geom_from, geom_erase);
+    EXCEPTION
+        WHEN OTHERS THEN
+            BEGIN
+                RETURN ST_Difference(ST_Buffer(geom_from, tolerance), ST_Buffer(geom_erase, tolerance));
+                EXCEPTION
+                    WHEN OTHERS THEN
+                        RETURN ST_GeomFromText('POLYGON EMPTY');
+    END;
+END
+$BODY$;
+
+ALTER FUNCTION public.bh3_safe_difference(geometry, geometry, double precision)
+    OWNER TO postgres;
+
+
+
+
+
+CREATE OR REPLACE FUNCTION public.bh3_safe_union(
+	geom geometry,
+	tolerance double precision DEFAULT (
+	0.00000001)::double precision)
+    RETURNS geometry
+    LANGUAGE 'plpgsql'
+
+    COST 100
+    STABLE STRICT 
+AS $BODY$
+BEGIN
+    RETURN ST_Union(geom);
+    EXCEPTION
+        WHEN OTHERS THEN
+            BEGIN
+                RETURN ST_Union(ST_Buffer(geom, tolerance));
+                EXCEPTION
+                    WHEN OTHERS THEN
+                        RETURN ST_GeomFromText('POLYGON EMPTY');
+    END;
+END
+$BODY$;
+
+ALTER FUNCTION public.bh3_safe_union(geometry, double precision)
+    OWNER TO postgres;
+
+
+
+
 
 CREATE OR REPLACE FUNCTION public.bh3_sensitivity_map(
 	habitat_sensitivity_schema name,
@@ -376,36 +435,3 @@ BEGIN
 	END;
 END;
 $BODY$;
-
-ALTER FUNCTION public.bh3_sensitivity_map(name, name, name, name, name, name, name)
-    OWNER TO postgres;
-
-COMMENT ON FUNCTION public.bh3_sensitivity_map(name, name, name, name, name, name, name)
-    IS 'Purpose:
-Creates the sensitivity map from the habitat sensitivity and species sensitivity tables.
-
-Approach:
-Creates the species_sensitivity_mode_final_table as the union of a spatial left join between the species_sensitivity_mode and 
-species_sensitivity_max tables, erasing the species_sensitivity_max geometry from the species_sensitivity_mode geometry, 
-and the unaltered spatial left join between the species_sensitivity_mode and species_sensitivity_max tables.
-Creates the species sensitivity all areas table as the union of the species_sensitivity_mode_final and species_sensitivity_max tables.
-Creates the habitat_sensitivity_final table as the union of a spatial left join between habitat_sensitivity_table and 
-species_sensitivity_all_areas_table, erasing the species_sensitivity_all_areas_table geometry from the habitat_sensitivity_table 
-geometry, and the unaltered spatial left join between habitat_sensitivity_table and species_sensitivity_all_areas_table.
-Creates the output sensitivity map as the union of the habitat_sensitivity_final and species_sensitivity_all_areas tables.
-
-Parameters:
-habitat_sensitivity_schema			name		Schema of the habitat sensitivity table.
-species_sensitivity_schema			name		Schema of the species sensitivity table.
-output_schema						name		Schema in which output table will be created (will be created if it does not already exist; tables in it will be overwritten).
-habitat_sensitivity_table			name		Name of habitat sensitivity table. Defaults to ''habitat_sensitivity''.
-species_sensitivity_max_table		name		Table name of species sensitivity maximum map. Defaults to ''species_sensitivity_max''.
-species_sensitivity_mode_table		name		Table name of species sensitivity mode map. Defaults to ''species_sensitivity_mode''.
-output_table						name		Table name of output sensitivity map. Defaults to ''sensitivity_map''.
-				SRID of output tables (reprojecting greatly affects performance). Defaults to 4326.
-
-Returns:
-A single error record. If execution succeeds its success field will be true and the remaining fields will be empty.
-
-Calls:
-bh3_drop_temp_table';

@@ -1,9 +1,8 @@
--- FUNCTION: public.bh3_habitat_boundary_clip(integer, character varying[], name, name, name, name, name, name, name, name, boolean, boolean, boolean, boolean)
+-- FUNCTION: public.bh3_habitat_boundary_clip(character varying[], name, name, name, name, name, name, name, name, boolean, boolean, boolean)
 
--- DROP FUNCTION public.bh3_habitat_boundary_clip(integer, character varying[], name, name, name, name, name, name, name, name, boolean, boolean, boolean, boolean);
+-- DROP FUNCTION public.bh3_habitat_boundary_clip(character varying[], name, name, name, name, name, name, name, name, boolean, boolean, boolean);
 
 CREATE OR REPLACE FUNCTION public.bh3_habitat_boundary_clip(
-	boundary_filter integer,
 	habitat_types_filter character varying[],
 	output_schema name,
 	output_table name DEFAULT 'habitat_sensitivity'::name,
@@ -11,9 +10,8 @@ CREATE OR REPLACE FUNCTION public.bh3_habitat_boundary_clip(
 	habitat_table name DEFAULT 'uk_habitat_map_wgs84'::name,
 	sensitivity_schema name DEFAULT 'lut'::name,
 	sensitivity_table name DEFAULT 'sensitivity_broadscale_habitats'::name,
-	boundary_schema name DEFAULT 'static'::name,
-	boundary_table name DEFAULT 'official_country_waters_wgs84'::name,
-	boundary_filter_negate boolean DEFAULT false,
+	boundary_subdivide_schema name DEFAULT 'static'::name,
+	boundary_subdivide_table name DEFAULT 'static'::name,
 	habitat_types_filter_negate boolean DEFAULT false,
 	exclude_empty_mismatched_eunis_l3 boolean DEFAULT true,
 	remove_overlaps boolean DEFAULT false,
@@ -29,7 +27,6 @@ CREATE OR REPLACE FUNCTION public.bh3_habitat_boundary_clip(
 AS $BODY$
 DECLARE
 	start_time timestamp;
-	temp_table_boundary_subdivide name;
 	temp_table_habitat_boundary_intersect name;
 	temp_table_habitat_boundary_intersect_union name;
  	error_rec record;
@@ -47,82 +44,8 @@ BEGIN
 	BEGIN
 		success := false;
 
-		temp_table_boundary_subdivide := 'boundary_subdivide'::name;
 		temp_table_habitat_boundary_intersect := 'habitat_boundary_intersect'::name;
 		temp_table_habitat_boundary_intersect_union := 'habitat_boundary_intersect_union'::name;
-
-		start_time := clock_timestamp();
-
-		/* clean up any previous output left behind */
-		FOR tn IN 
-			EXECUTE format('SELECT c.relname '
-						   'FROM pg_class c '
-							   'JOIN pg_namespace n ON c.relnamespace = n.oid '
-						   'WHERE n.nspname = $1 AND c.relname IN($2)')
-			USING output_schema, output_table 
-		LOOP
-			EXECUTE 'SELECT DropGeometryTable($1::text,$2::text)' USING output_schema, tn;
-		END LOOP;
-
-		/* clean up any previous temp table left behind */
-		CALL bh3_drop_temp_table(temp_table_boundary_subdivide);
-		CALL bh3_drop_temp_table(temp_table_habitat_boundary_intersect);
-		CALL bh3_drop_temp_table(temp_table_habitat_boundary_intersect_union);
-
-		RAISE INFO 'bh3_habitat_boundary_clip: Removed any outputs of previous runs: %', (clock_timestamp() - start_time);
-
-		start_time := clock_timestamp();
-
-		srid_bnd := bh3_find_srid(boundary_schema, boundary_table, 'the_geom'::name);
-		IF srid_bnd != 4326 AND srid_hab > 0 THEN
-			geom_exp_bnd := format('ST_Transform(the_geom,%s)', 4326);
-		ELSE
-			geom_exp_bnd := 'the_geom';
-		END IF;
-
-		IF boundary_filter_negate THEN
-			negation = 'NOT';
-		ELSE
-			negation = '';
-		END IF;
-
-		EXECUTE format('CREATE TEMP TABLE %1$I AS '
-					   'WITH cte_subdiv AS '
-					   '('
-						   'SELECT ST_Subdivide(%2$s) AS the_geom '
-						   'FROM %3$I.%4$I '
-						   'WHERE %5$s gid = $1'
-					   ') '
-					   'SELECT ROW_NUMBER() OVER() AS gid'
-						   ',the_geom '
-					   'FROM cte_subdiv',
-					   temp_table_boundary_subdivide, geom_exp_bnd, 
-					   boundary_schema, boundary_table, negation)
-		USING boundary_filter;
-
-		GET DIAGNOSTICS rows_affected = ROW_COUNT;
-		RAISE INFO 'bh3_habitat_boundary_clip: Inserted % rows into temporary table %: %', 
-			rows_affected, temp_table_boundary_subdivide, (clock_timestamp() - start_time);
-
-		start_time := clock_timestamp();
-
-		CALL bh3_repair_geometries(NULL, temp_table_boundary_subdivide);
-
-		GET DIAGNOSTICS rows_affected = ROW_COUNT;
-		RAISE INFO 'bh3_habitat_boundary_clip: Repaired % geometries in temporary table %: %', 
-			rows_affected, temp_table_habitat_boundary_intersect, (clock_timestamp() - start_time);
-
-		start_time := clock_timestamp();
-
-		EXECUTE format('ALTER TABLE %1$I ADD CONSTRAINT %1$s_pkey PRIMARY KEY(gid)', 
-					   temp_table_boundary_subdivide);
-		EXECUTE format('CREATE UNIQUE INDEX idx_%1$s_gid ON %1$I USING BTREE(gid)', 
-					   temp_table_boundary_subdivide);
-		EXECUTE format('CREATE INDEX sidx_%1$s_the_geom ON %1$I USING GIST(the_geom)', 
-					   temp_table_boundary_subdivide);
-
-		RAISE INFO 'bh3_habitat_boundary_clip: Indexed temporary table %: %', 
-			temp_table_boundary_subdivide, (clock_timestamp() - start_time);
 
 		start_time := clock_timestamp();
 
@@ -158,11 +81,11 @@ BEGIN
 						   ',hab.hab_type'
 						   ',hab.eunis_l3 '
 					   'FROM %3$I.%4$I hab '
-						   'JOIN %5$I bnd ON ST_Intersects(hab.the_geom,bnd.the_geom) '
-					   'WHERE %6$s',
+						   'JOIN %5$I.%6$I bnd ON ST_Intersects(hab.the_geom,bnd.the_geom) '
+					   'WHERE %7$s',
 					   temp_table_habitat_boundary_intersect, geom_exp_hab,
-					   habitat_schema, habitat_table, 
-					   temp_table_boundary_subdivide, habitat_type_condition)
+					   habitat_schema, habitat_table, boundary_subdivide_schema, 
+					   boundary_subdivide_table, habitat_type_condition)
 		USING habitat_types_filter;
 
 		GET DIAGNOSTICS rows_affected = ROW_COUNT;
@@ -294,7 +217,6 @@ BEGIN
 		END IF;
 
 		/* remove temp tables */
-		CALL bh3_drop_temp_table(temp_table_boundary_subdivide);
 		CALL bh3_drop_temp_table(temp_table_habitat_boundary_intersect);
 		CALL bh3_drop_temp_table(temp_table_habitat_boundary_intersect_union);
 
@@ -308,10 +230,10 @@ BEGIN
 END;
 $BODY$;
 
-ALTER FUNCTION public.bh3_habitat_boundary_clip(integer, character varying[], name, name, name, name, name, name, name, name, boolean, boolean, boolean, boolean)
+ALTER FUNCTION public.bh3_habitat_boundary_clip(character varying[], name, name, name, name, name, name, name, name, boolean, boolean, boolean)
     OWNER TO postgres;
 
-COMMENT ON FUNCTION public.bh3_habitat_boundary_clip(integer, character varying[], name, name, name, name, name, name, name, name, boolean, boolean, boolean, boolean)
+COMMENT ON FUNCTION public.bh3_habitat_boundary_clip(character varying[], name, name, name, name, name, name, name, name, boolean, boolean, boolean)
     IS 'Purpose:
 Creates habitat_sensitivity table for the selected AOI in the selected output schema.
 
@@ -323,7 +245,6 @@ Despite the extra steps and multiple geometry repairs between them, this is subs
 large boundary polygons.
 
 Parameters:
-boundary_filter						integer					gid of the boundary polygon that delimits the AOI.
 habitat_types_filter				character varying[]		Array of EUNIS L3 codes to be included or excluded.
 output_schema						name					Schema of the output habitat sensitivity table.
 output_table						name					Name of the output habitat sensitivity table. Defaults to ''habitat_sensitivity''.
@@ -331,9 +252,8 @@ habitat_schema						name					Schema of the habitat table. Defaults to ''static''
 habitat_table						name					Name of the habitat table. Defaults to ''uk_habitat_map_wgs84''.
 sensitivity_schema					name					Schema of the habitat sensitvity lookup table. Defaults to ''lut''.
 sensitivity_table					name					Name of the habitat sensitvity lookup table. Defaults to ''sensitivity_broadscale_habitats''.
-boundary_schema						name					Schema of the boundary table defining the AOI. Defaults to ''static''.
-boundary_table						name					Name of the boundary table defining the AOI. Defaults to ''official_country_waters_wgs84''.
-boundary_filter_negate				boolean					If false, the polygon identified by boundary_filter defines the AOI. Otherwise the AOI is defined by all but that polygon. Defaults to false.
+boundary_subdivide_schema			name					Schema of the subdivided boundary table defining the AOI. Defaults to ''static''.
+boundary_subdivide_table			name					Name of the subdivided boundary table defining the AOI. Defaults to ''official_country_waters_wgs84''.
 habitat_types_filter_negate			boolean					If false, the EUNIS L3 codes in habitat_types_filter are included, if true they are excluded. Defaults to false.
 exclude_empty_mismatched_eunis_l3	boolean					Controls whether habitats whose EUNIS L3 code is not matched in sensitivity_table are excluded (true) or included (false). Defaults to true.
 remove_overlaps						boolean					Controls whether bh3_habitat_remove_overlaps is called to remove overlaps from output_table. Defaults to false.

@@ -1,17 +1,15 @@
--- FUNCTION: public.bh3_species_sensitivity_clipped(name, name, integer, sensitivity_source, timestamp without time zone, character varying[], timestamp without time zone, boolean, boolean, integer)
+-- FUNCTION: public.bh3_species_sensitivity_clipped(name, sensitivity_source, timestamp without time zone, timestamp without time zone, name, character varying[], boolean, integer)
 
--- DROP FUNCTION public.bh3_species_sensitivity_clipped(name, name, integer, sensitivity_source, timestamp without time zone, character varying[], timestamp without time zone, boolean, boolean, integer);
+-- DROP FUNCTION public.bh3_species_sensitivity_clipped(name, sensitivity_source, timestamp without time zone, timestamp without time zone, name, character varying[], boolean, integer);
 
 CREATE OR REPLACE FUNCTION public.bh3_species_sensitivity_clipped(
 	boundary_schema name,
-	boundary_table name,
-	boundary_filter integer,
 	sensitivity_source_table sensitivity_source,
 	date_start timestamp without time zone,
-	habitat_types_filter character varying[] DEFAULT NULL::character varying[],
 	date_end timestamp without time zone DEFAULT now(
 	),
-	boundary_filter_negate boolean DEFAULT false,
+	boundary_table name DEFAULT 'boundary'::name,
+	habitat_types_filter character varying[] DEFAULT NULL::character varying[],
 	habitat_types_filter_negate boolean DEFAULT false,
 	output_srid integer DEFAULT 4326)
     RETURNS TABLE(gid bigint, the_geom geometry, survey_key character varying, survey_event_key character varying, sample_reference character varying, sample_date timestamp with time zone, biotope_code character varying, biotope_desc text, qualifier character varying, eunis_code_2007 character varying, eunis_name_2007 character varying, annex_i_habitat character varying, characterising_species character varying, sensitivity_ab_su_num smallint, confidence_ab_su_num smallint, sensitivity_ab_ss_num smallint, confidence_ab_ss_num smallint) 
@@ -23,17 +21,10 @@ CREATE OR REPLACE FUNCTION public.bh3_species_sensitivity_clipped(
 AS $BODY$
 DECLARE
 	srid_smp int;
-	negation text;
 	geom_exp_smp text;
 	habitat_type_condition text;
 
 BEGIN
-	IF boundary_filter_negate THEN
-		negation = 'NOT';
-	ELSE
-		negation = '';
-	END IF;
-
 	srid_smp := bh3_find_srid(boundary_schema, boundary_table, 'the_geom');
 	IF srid_smp != output_srid AND srid_smp > 0 AND output_srid > 0 THEN
 		geom_exp_smp := format('ST_Transform(smp.%1$I,%2$s) AS %1$I', 'the_geom', output_srid);
@@ -83,19 +74,18 @@ BEGIN
 									'JOIN marinerec.sample_biotope_all sba ON smp.sample_reference = sba.sample_reference '
 									'JOIN lut.eunis_correlation_table ect ON ect.jncc_15_03_code = sba.biotope_code '
 									'JOIN %2$I.%3$I bnd ON ST_CoveredBy(%1$s,bnd.the_geom)'
-								'WHERE %4$s bnd.gid = $2 '
-									'AND smp.sample_date >= $3 '
-									'AND smp.sample_date <= $4 '
-									'%5$s',
-								geom_exp_smp, boundary_schema, boundary_table, negation, habitat_type_condition)
-	USING sensitivity_source_table, boundary_filter, date_start, date_end, habitat_types_filter;
+								'WHERE smp.sample_date >= $2 '
+									'AND smp.sample_date <= $3 '
+									'%4$s',
+								geom_exp_smp, boundary_schema, boundary_table, habitat_type_condition)
+	USING sensitivity_source_table, date_start, date_end, habitat_types_filter;
 END;
 $BODY$;
 
-ALTER FUNCTION public.bh3_species_sensitivity_clipped(name, name, integer, sensitivity_source, timestamp without time zone, character varying[], timestamp without time zone, boolean, boolean, integer)
+ALTER FUNCTION public.bh3_species_sensitivity_clipped(name, sensitivity_source, timestamp without time zone, timestamp without time zone, name, character varying[], boolean, integer)
     OWNER TO postgres;
 
-COMMENT ON FUNCTION public.bh3_species_sensitivity_clipped(name, name, integer, sensitivity_source, timestamp without time zone, character varying[], timestamp without time zone, boolean, boolean, integer)
+COMMENT ON FUNCTION public.bh3_species_sensitivity_clipped(name, sensitivity_source, timestamp without time zone, timestamp without time zone, name, character varying[], boolean, integer)
     IS 'Purpose:
 Creates a table of species sensitivity rows within the specified boundary polygon(s).
 
@@ -105,14 +95,12 @@ marinerec.sample_species, marinerec.sample_biotope_all) and lut.eunis_correlatio
 the specified boundary polygon(s).
 
 Parameters:
-boundary_schema					name							Schema of table containing AOI boundary polygons. Defaults to ''static''.
-boundary_table					name							Name of table containing AOI boundary polygons. Defaults to ''official_country_waters_wgs84''.
-boundary_filter					integer							gid of AOI polygon in boundary_table to be included (or excluded if boundary_filter_negate is true).
+boundary_schema					name							Schema of table containing single AOI boundary polygon and bounding box.
 sensitivity_source_table		sensitivity_source				Source table for habitat sensitivity scores (enum value one of { ''broadscale_habitats'', ''eco_groups'', ''rock'', ''rock_eco_groups'' }).
 date_start						timestamp without time zone		Earliest date for Marine Recorder spcies samples to be included.
-habitat_types_filter			character varying[]				Array of eunis_l3 codes of habitats in habitat_table to be included (or excluded if habitat_types_filter_negate is true).
 date_end						timestamp without time zone		Latest date for Marine Recorder species samples and pressure data to be included. Defaults to current date and time.
-boundary_filter_negate			boolean							If true condition built with boundary_filter is to be negated, i.e. AOI is all but the polygon identified by boundary_filter. Defaults to false.
+boundary_table					name							Name of table containing single AOI boundary polygon and bounding box. Defaults to ''boundary''.
+habitat_types_filter			character varying[]				Array of eunis_l3 codes of habitats in habitat_table to be included (or excluded if habitat_types_filter_negate is true).
 habitat_types_filter_negate		boolean							If true condition built with habitat_types_filter is to be negated, i.e. EUNIS L3 codes in habitat_types_filter will be excluded. Defaults to false.
 output_srid						integer							SRID of output tables (reprojecting greatly affects performance). Defaults to 4326.
 

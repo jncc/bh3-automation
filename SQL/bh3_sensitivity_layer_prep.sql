@@ -1,24 +1,22 @@
--- FUNCTION: public.bh3_sensitivity_layer_prep(name, name, integer, sensitivity_source, timestamp without time zone, timestamp without time zone, character varying[], name, name, name, name, name, name, boolean, boolean, integer)
+-- FUNCTION: public.bh3_sensitivity_layer_prep(name, name, name, sensitivity_source, timestamp without time zone, timestamp without time zone, name, character varying[], boolean, name, name, name, name, integer)
 
--- DROP FUNCTION public.bh3_sensitivity_layer_prep(name, name, integer, sensitivity_source, timestamp without time zone, timestamp without time zone, character varying[], name, name, name, name, name, name, boolean, boolean, integer);
+-- DROP FUNCTION public.bh3_sensitivity_layer_prep(name, name, name, sensitivity_source, timestamp without time zone, timestamp without time zone, name, character varying[], boolean, name, name, name, name, integer);
 
 CREATE OR REPLACE FUNCTION public.bh3_sensitivity_layer_prep(
+	boundary_schema name,
 	habitat_schema name,
 	output_schema name,
-	boundary_filter integer,
 	sensitivity_source_table sensitivity_source,
 	date_start timestamp without time zone,
 	date_end timestamp without time zone DEFAULT now(
 	),
+	boundary_table name DEFAULT 'official_country_waters_wgs84'::name,
 	habitat_types_filter character varying[] DEFAULT NULL::character varying[],
+	habitat_types_filter_negate boolean DEFAULT false,
 	habitat_table name DEFAULT 'habitat_sensitivity'::name,
 	habitat_table_grid name DEFAULT 'habitat_sensitivity_grid'::name,
 	output_table_max name DEFAULT 'species_sensitivity_max'::name,
 	output_table_mode name DEFAULT 'species_sensitivity_mode'::name,
-	boundary_schema name DEFAULT 'static'::name,
-	boundary_table name DEFAULT 'official_country_waters_wgs84'::name,
-	boundary_filter_negate boolean DEFAULT false,
-	habitat_types_filter_negate boolean DEFAULT false,
 	output_srid integer DEFAULT 4326,
 	OUT success boolean,
 	OUT exc_text text,
@@ -84,11 +82,10 @@ BEGIN
 						   ',the_geom'
 						   ',sensitivity_ab_su_num'
 						   ',sensitivity_ab_ss_num '
-					   'FROM bh3_species_sensitivity_clipped($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)',
+					   'FROM bh3_species_sensitivity_clipped($1,$2,$3,$4,$5,$6,$7,$8)',
 					   species_clip_table)
-		USING boundary_schema, boundary_table, boundary_filter, sensitivity_source_table, 
-			date_start, habitat_types_filter, date_end, boundary_filter_negate, habitat_types_filter_negate,
-			output_srid;
+		USING boundary_schema, sensitivity_source_table, date_start, date_end, 
+			boundary_table, habitat_types_filter, habitat_types_filter_negate, output_srid;
 
 		GET DIAGNOSTICS rows_affected = ROW_COUNT;
 		RAISE INFO 'bh3_sensitivity_layer_prep: Inserted % rows into temporary table %: %', 
@@ -336,10 +333,10 @@ BEGIN
 END;
 $BODY$;
 
-ALTER FUNCTION public.bh3_sensitivity_layer_prep(name, name, integer, sensitivity_source, timestamp without time zone, timestamp without time zone, character varying[], name, name, name, name, name, name, boolean, boolean, integer)
+ALTER FUNCTION public.bh3_sensitivity_layer_prep(name, name, name, sensitivity_source, timestamp without time zone, timestamp without time zone, name, character varying[], boolean, name, name, name, name, integer)
     OWNER TO postgres;
 
-COMMENT ON FUNCTION public.bh3_sensitivity_layer_prep(name, name, integer, sensitivity_source, timestamp without time zone, timestamp without time zone, character varying[], name, name, name, name, name, name, boolean, boolean, integer)
+COMMENT ON FUNCTION public.bh3_sensitivity_layer_prep(name, name, name, sensitivity_source, timestamp without time zone, timestamp without time zone, name, character varying[], boolean, name, name, name, name, integer)
     IS 'Purpose:
 Creates the sensitivity maximum and mode tables from the habitat table and Marine Recorder species sensitivity rows for the specified time period 
 and habitats within the specified boundary polygon(s).
@@ -355,21 +352,19 @@ aggregating by habitat table gid, and inserting the top ranked rows plus the hab
 into the output sensitivity mode table provided the number of samples divided by the polygon area in square metres is at least 0.00000005.
 
 Parameters:
+boundary_schema				name							Schema of table containing single AOI boundary polygon and bounding box.
 habitat_schema				name							Schema of input habitat_table.
 output_schema				name							Schema in which output tables will be created (will be created if it does not already exist; tables in it will be overwritten).
-boundary_filter				integer							gid of AOI polygon in boundary_table to be included (or excluded if boundary_filter_negate is true).
 sensitivity_source_table	sensitivity_source				Source table for habitat sensitivity scores (enum value one of { ''broadscale_habitats'', ''eco_groups'', ''rock'', ''rock_eco_groups'' }).
 date_start					timestamp without time zone		Earliest date for Marine Recorder spcies samples to be included.
 date_end					timestamp without time zone		Latest date for Marine Recorder species samples and pressure data to be included. Defaults to current date and time.
+boundary_table				name							Name of table containing single AOI boundary polygon and bounding boxs. Defaults to ''boundary''.
 habitat_types_filter		character varying[]				Array of eunis_l3 codes of habitats in habitat_table to be included (or excluded if habitat_types_filter_negate is true).
+habitat_types_filter_negate	boolean							If true condition built with habitat_types_filter is to be negated, i.e. EUNIS L3 codes in habitat_types_filter will be excluded. Defaults to false.
 habitat_table				name							Name of habitat sensitivity output table. Defaults to ''habitat_sensitivity''.
 habitat_table_grid			name							Name of gridded habitat sensitivity output table. Defaults to ''habitat_sensitivity_grid''.
 output_table_max			name							Table name of species sensitivity maximum map. Defaults to ''species_sensitivity_max''.
 output_table_mode			name							Table name of species sensitivity mode map. Defaults to ''species_sensitivity_mode''.
-boundary_schema				name							Schema of table containing AOI boundary polygons. Defaults to ''static''.
-boundary_table				name							Name of table containing AOI boundary polygons. Defaults to ''official_country_waters_wgs84''.
-boundary_filter_negate		boolean							If true condition built with boundary_filter is to be negated, i.e. AOI is all but the polygon identified by boundary_filter. Defaults to false.
-habitat_types_filter_negate	boolean							If true condition built with habitat_types_filter is to be negated, i.e. EUNIS L3 codes in habitat_types_filter will be excluded. Defaults to false.
 output_srid					integer							SRID of output tables (reprojecting greatly affects performance). Defaults to 4326.
 
 Returns:

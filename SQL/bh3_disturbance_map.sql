@@ -1,22 +1,20 @@
--- FUNCTION: public.bh3_disturbance_map(integer, timestamp without time zone, name, name, name, name, name, name, name, name, name, boolean, timestamp without time zone, integer)
+-- FUNCTION: public.bh3_disturbance_map(name, name, name, name, timestamp without time zone, timestamp without time zone, name, name, name, name, name, integer)
 
--- DROP FUNCTION public.bh3_disturbance_map(integer, timestamp without time zone, name, name, name, name, name, name, name, name, name, boolean, timestamp without time zone, integer);
+-- DROP FUNCTION public.bh3_disturbance_map(name, name, name, name, timestamp without time zone, timestamp without time zone, name, name, name, name, name, integer);
 
 CREATE OR REPLACE FUNCTION public.bh3_disturbance_map(
-	boundary_filter integer,
-	date_start timestamp without time zone,
+	boundary_schema name,
 	pressure_schema name,
 	sensitivity_map_schema name,
 	output_schema name,
-	boundary_schema name DEFAULT 'static'::name,
-	boundary_table name DEFAULT 'official_country_waters_wgs84'::name,
+	date_start timestamp without time zone,
+	date_end timestamp without time zone DEFAULT now(
+	),
+	boundary_table name DEFAULT 'boundary'::name,
 	sensitivity_map_table name DEFAULT 'sensitivity_map'::name,
 	output_table name DEFAULT 'disturbance_map'::name,
 	sar_surface_column name DEFAULT 'sar_surface'::name,
 	sar_subsurface_column name DEFAULT 'sar_subsurface'::name,
-	boundary_filter_negate boolean DEFAULT false,
-	date_end timestamp without time zone DEFAULT now(
-	),
 	output_srid integer DEFAULT 4326)
     RETURNS TABLE(gid bigint, exc_text character varying, exc_detail character varying, exc_hint character varying) 
     LANGUAGE 'plpgsql'
@@ -77,11 +75,11 @@ BEGIN
 	
 		/* store pressure c-squares in temporary table */
 		EXECUTE format('CREATE TEMP TABLE %1$I AS '
-					   'SELECT * FROM bh3_get_pressure_csquares($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)',
+					   'SELECT * FROM bh3_get_pressure_csquares($1,$2,$3,$4,$5,$6,$7,$8)',
 					   pressure_csquares_table)
-		USING boundary_filter, pressure_schema, date_start, date_end, sar_surface_column, sar_subsurface_column, 
-			boundary_schema, boundary_table, boundary_filter_negate, output_srid;
-		
+		USING boundary_schema, pressure_schema, date_start, date_end, boundary_table, 
+			sar_surface_column, sar_subsurface_column, output_srid;
+	
 		EXECUTE format('CREATE INDEX sidx_%1$s_the_geom ON %1$I USING GIST(the_geom)', pressure_csquares_table);
 		EXECUTE format('CREATE UNIQUE INDEX idx_%1$s_gid ON %1$I USING BTREE(gid)', pressure_csquares_table);
 
@@ -280,10 +278,10 @@ BEGIN
 END;
 $BODY$;
 
-ALTER FUNCTION public.bh3_disturbance_map(integer, timestamp without time zone, name, name, name, name, name, name, name, name, name, boolean, timestamp without time zone, integer)
+ALTER FUNCTION public.bh3_disturbance_map(name, name, name, name, timestamp without time zone, timestamp without time zone, name, name, name, name, name, integer)
     OWNER TO postgres;
 
-COMMENT ON FUNCTION public.bh3_disturbance_map(integer, timestamp without time zone, name, name, name, name, name, name, name, name, name, boolean, timestamp without time zone, integer)
+COMMENT ON FUNCTION public.bh3_disturbance_map(name, name, name, name, timestamp without time zone, timestamp without time zone, name, name, name, name, name, integer)
     IS 'Purpose:
 Creates the disturbance map from sensitivity and pressure maps.
 
@@ -295,19 +293,17 @@ sub-surface abrasion scores from the pressure c-squares using case expressions a
 of sensitivity and pressure c-square geometries.
 
 Parameters:
-boundary_filter			integer							gid of AOI polygon in boundary_table to be included (or excluded if boundary_filter_negate is true).
-date_start				timestamp without time zone		Earliest date for Marine Recorder spcies samples to be included.
+boundary_schema			name							Schema of table containing single AOI boundary polygon and bounding box.
 pressure_schema			name							Schema in which pressure source tables are located (all tables in this schema that have the required columns will be used).
 sensitivity_map_schema	name							Schema in which sensitivity map table is located.
 output_schema			name							Schema in which output tables will be created (will be created if it does not already exist; tables in it will be overwritten).
-boundary_schema			name							Schema of table containing AOI boundary polygons. Defaults to ''static''.
-boundary_table			name							Name of table containing AOI boundary polygons. Defaults to ''official_country_waters_wgs84''.
+date_start				timestamp without time zone		Earliest date for Marine Recorder spcies samples to be included.
+date_end				timestamp without time zone		Latest date for Marine Recorder species samples and pressure data to be included. Defaults to current date and time.
+boundary_table			name							Name of table containing single AOI boundary polygon and bounding box. Defaults to ''boundary''.
 sensitivity_map_table	name							Table name of sensitivity map. Defaults to ''sensitivity_map''.
 output_table			name							Table name of output disturbance map. Defaults to ''disturbance_map''.
 sar_surface_column		name							SAR surface column name in pressure source tables. Defaults to ''sar_surface''.
 sar_subsurface_column	name							SAR sub-surface column name in pressure source tables. Defaults to ''sar_subsurface''.
-boundary_filter_negate	boolean							If true condition built with boundary_filter is to be negated, i.e. AOI is all but the polygon identified by boundary_filter. Defaults to false.
-date_end				timestamp without time zone		Latest date for Marine Recorder species samples and pressure data to be included. Defaults to current date and time.
 output_srid				integer							SRID of output tables (reprojecting greatly affects performance). Defaults to 4326.
 
 Returns:

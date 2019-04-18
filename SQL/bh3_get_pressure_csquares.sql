@@ -1,18 +1,16 @@
--- FUNCTION: public.bh3_get_pressure_csquares(integer, name, timestamp without time zone, timestamp without time zone, name, name, name, name, boolean, integer)
+-- FUNCTION: public.bh3_get_pressure_csquares(name, name, timestamp without time zone, timestamp without time zone, name, name, name, integer)
 
--- DROP FUNCTION public.bh3_get_pressure_csquares(integer, name, timestamp without time zone, timestamp without time zone, name, name, name, name, boolean, integer);
+-- DROP FUNCTION public.bh3_get_pressure_csquares(name, name, timestamp without time zone, timestamp without time zone, name, name, name, integer);
 
 CREATE OR REPLACE FUNCTION public.bh3_get_pressure_csquares(
-	boundary_filter integer,
+	boundary_schema name,
 	pressure_schema name,
 	date_start timestamp without time zone,
 	date_end timestamp without time zone DEFAULT now(
 	),
+	boundary_table name DEFAULT 'boundary'::name,
 	sar_surface_column name DEFAULT 'sar_surface'::name,
 	sar_subsurface_column name DEFAULT 'sar_subsurface'::name,
-	boundary_schema name DEFAULT 'static'::name,
-	boundary_table name DEFAULT 'official_country_waters_wgs84'::name,
-	boundary_filter_negate boolean DEFAULT false,
 	output_srid integer DEFAULT 4326)
     RETURNS TABLE(gid bigint, c_square character varying, n bigint, sar_surface_min double precision, sar_surface_max double precision, sar_surface_avg double precision, sar_surface_cat_min integer, sar_surface_cat_max integer, sar_surface_cat_range integer, sar_surface_variable boolean, sar_surface double precision, sar_surface_cat_comb integer, sar_subsurface_min double precision, sar_subsurface_max double precision, sar_subsurface_avg double precision, sar_subsurface_cat_min integer, sar_subsurface_cat_max integer, sar_subsurface_cat_range integer, sar_subsurface_variable boolean, sar_subsurface double precision, sar_subsurface_cat_comb integer, the_geom geometry) 
     LANGUAGE 'plpgsql'
@@ -42,12 +40,6 @@ BEGIN
 
 		start_year := extract(year from date_start)::integer;
 		end_year := extract(year from date_end)::integer;
-
-		IF boundary_filter_negate THEN
-			negation = 'NOT';
-		ELSE
-			negation = '';
-		END IF;
 
 		OPEN rel_cursor FOR EXECUTE format(
 			'SELECT c.relname '
@@ -97,11 +89,10 @@ BEGIN
 											 ',%5$s AS the_geom '
 										 'FROM %6$I.%7$I prs '
 											 'JOIN %8$I.%9$I bnd ON ST_Intersects(%5$s,bnd.%10$I) '
-										 'WHERE %11$s bnd.gid = $1 '
-											 'AND %2$I >= $2 AND %2$I <= $3', 
+										 'WHERE %2$I >= $1 AND %2$I <= $2', 
 										 'c_square', 'year', sar_surface_column, sar_subsurface_column, geom_exp, 
 										 pressure_schema, rel_cursor_row.relname, boundary_schema, boundary_table,
-										 geom_fld, negation);
+										 geom_fld);
   		END LOOP;
 
 		CLOSE rel_cursor;
@@ -182,7 +173,7 @@ BEGIN
 		
 			RAISE INFO 'bh3_get_pressure_csquares: sqlstmt: %', sqlstmt;
 
-			RETURN QUERY EXECUTE sqlstmt USING boundary_filter, start_year, end_year;
+			RETURN QUERY EXECUTE sqlstmt USING start_year, end_year;
 		END IF;
 	EXCEPTION WHEN OTHERS THEN
 		GET STACKED DIAGNOSTICS exc_text = MESSAGE_TEXT,
@@ -194,10 +185,10 @@ BEGIN
 END;
 $BODY$;
 
-ALTER FUNCTION public.bh3_get_pressure_csquares(integer, name, timestamp without time zone, timestamp without time zone, name, name, name, name, boolean, integer)
+ALTER FUNCTION public.bh3_get_pressure_csquares(name, name, timestamp without time zone, timestamp without time zone, name, name, name, integer)
     OWNER TO postgres;
 
-COMMENT ON FUNCTION public.bh3_get_pressure_csquares(integer, name, timestamp without time zone, timestamp without time zone, name, name, name, name, boolean, integer)
+COMMENT ON FUNCTION public.bh3_get_pressure_csquares(name, name, timestamp without time zone, timestamp without time zone, name, name, name, integer)
     IS 'Purpose:
 Creates an in-memory table of categorised pressure c-squares from the tables in the specified pressure_schema. 
 All tables in pressure_schema that have the required columns will be included.
@@ -209,15 +200,13 @@ categorises the scores into sar_surface and sar_subsurface scores between one an
 of the resulting row sets.
 
 Paramerters:
-boundary_filter			integer							gid of AOI polygon in boundary_table to be included (or excluded if boundary_filter_negate is true).
+boundary_schema			name							Schema of table containing single AOI boundary polygon and bounding box.
 pressure_schema			name							Schema in which pressure source tables are located (all tables in this schema that have the required columns will be used).
 date_start				timestamp without time zone		Earliest date for Marine Recorder spcies samples to be included.
 date_end				timestamp without time zone		Latest date for Marine Recorder species samples and pressure data to be included. Defaults to current date and time. Defaults to current date and time.
+boundary_table			name							Name of table containing single AOI boundary polygon and bounding box. Defaults to ''boundary''.
 sar_surface_column		name							SAR surface column name in pressure source tables. Defaults to ''sar_surface''.
 sar_subsurface_column	name							SAR sub-surface column name in pressure source tables. Defaults to ''sar_subsurface''.
-boundary_schema			name							Schema of table containing AOI boundary polygons. Defaults to ''static''.
-boundary_table			name							Name of table containing AOI boundary polygons. Defaults to ''official_country_waters_wgs84''.
-boundary_filter_negate	boolean							If true condition built with boundary_filter is to be negated, i.e. AOI is all but the polygon identified by boundary_filter. Defaults to false.
 output_srid				integer							SRID of output tables (reprojecting greatly affects performance). Defaults to 4326.
 
 Returns:

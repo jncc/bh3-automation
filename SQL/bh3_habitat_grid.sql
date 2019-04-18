@@ -1,16 +1,14 @@
--- FUNCTION: public.bh3_habitat_grid(integer, name, name, name, name, name, name, boolean, numeric)
+-- FUNCTION: public.bh3_habitat_grid(name, name, name, name, name, name, numeric)
 
--- DROP FUNCTION public.bh3_habitat_grid(integer, name, name, name, name, name, name, boolean, numeric);
+-- DROP FUNCTION public.bh3_habitat_grid(name, name, name, name, name, name, numeric);
 
 CREATE OR REPLACE FUNCTION public.bh3_habitat_grid(
-	boundary_filter integer,
+	boundary_schema name,
 	habitat_sensitivity_schema name,
 	output_schema name,
+	boundary_table name DEFAULT 'boundary'::name,
 	habitat_sensitivity_table name DEFAULT 'habitat_sensitivity'::name,
 	output_table name DEFAULT 'habitat_sensitivity_grid'::name,
-	boundary_schema name DEFAULT 'static'::name,
-	boundary_table name DEFAULT 'official_country_waters_wgs84'::name,
-	boundary_filter_negate boolean DEFAULT false,
 	cell_size_degrees numeric DEFAULT 0.05)
     RETURNS TABLE(gid bigint, exc_text character varying, exc_detail character varying, exc_hint character varying) 
     LANGUAGE 'plpgsql'
@@ -89,10 +87,9 @@ BEGIN
 
 		/* create grid for AOI in temporary table */
 		EXECUTE format('CREATE TEMP TABLE %1$I AS '
-					   'SELECT * FROM bh3_create_csquares($1,false,$2,$3,$4,$5,4326)', 
+					   'SELECT * FROM bh3_create_csquares($1,$2,false,$3,4326)', 
 					   aoi_grid_table)
-		USING boundary_filter, boundary_schema, boundary_table, 
-			boundary_filter_negate, cell_size_degrees;
+		USING boundary_schema, boundary_table, cell_size_degrees;
 
 		/* index gridded habitat sensitivity output table */
 		EXECUTE format('CREATE INDEX sidx_%1$s_the_geom ON %1$I USING GIST(the_geom)', aoi_grid_table);
@@ -194,10 +191,10 @@ BEGIN
 END;
 $BODY$;
 
-ALTER FUNCTION public.bh3_habitat_grid(integer, name, name, name, name, name, name, boolean, numeric)
+ALTER FUNCTION public.bh3_habitat_grid(name, name, name, name, name, name, numeric)
     OWNER TO postgres;
 
-COMMENT ON FUNCTION public.bh3_habitat_grid(integer, name, name, name, name, name, name, boolean, numeric)
+COMMENT ON FUNCTION public.bh3_habitat_grid(name, name, name, name, name, name, numeric)
     IS 'Purpose:
 Creates a gridded version of the habitat_sensitivity_table.
 
@@ -206,14 +203,12 @@ Creates a c-square grid table within the specified boundary and intersects it wi
 ungridded habitat_sensitivity_table, calling the fast ST_ClipByBox2D in a loop over a cursor. 
 
 Parameters:
-boundary_filter				integer		gid of the boundary polygon that delimits the AOI.
+boundary_schema				name		Schema of table containing single AOI boundary polygon and bounding box.
 habitat_sensitivity_schema	name		Schema of the habitat sensitivity table.
 output_schema				name		Schema of the output gridded habitat sensitivity table.
+boundary_table				name		Name of table containing single AOI boundary polygon and bounding box. Defaults to ''boundary''.
 habitat_sensitivity_table	name		Name of habitat sensitivity table. Defaults to ''habitat_sensitivity''.
 output_table				name		Name of gridded habitat sensitivity output table. Defaults to ''habitat_sensitivity_grid''.
-boundary_schema				name		Schema of table containing AOI boundary polygons. Defaults to ''static''.
-boundary_table				name		Name of table containing AOI boundary polygons. Defaults to ''official_country_waters_wgs84''.
-boundary_filter_negate		boolean		If true condition built with boundary_filter is to be negated, i.e. AOI is all but the polygon identified by boundary_filter. Defaults to false.
 cell_size_degrees			numeric		Cell size in degrees. Defaults to 0.05.
 
 Returns:

@@ -88,6 +88,12 @@ CREATE AGGREGATE public.bh3_safe_union(geometry)
 
 
 
+DROP FUNCTION IF EXISTS public.bh3_habitat_clip_by_subdivide(integer, character varying[], name, name, name, name, name, name, name, name, name, boolean, boolean, boolean, numeric);
+
+
+
+
+
 CREATE OR REPLACE FUNCTION public.bh3_boundary_subdivide(
 	boundary_filter integer[],
 	output_schema name,

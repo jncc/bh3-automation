@@ -1,8 +1,8 @@
--- PROCEDURE: public.bh3_procedure(integer[], character varying[], timestamp without time zone, sensitivity_source, name, name, name, name, name, name, name, name, name, name, name, name, name, name, name, name, timestamp without time zone, boolean, boolean, boolean, integer)
+-- FUNCTION: public.bh3_entry(integer[], character varying[], timestamp without time zone, sensitivity_source, name, name, name, name, name, name, name, name, name, name, name, name, name, name, name, name, timestamp without time zone, boolean, boolean, boolean, integer)
 
--- DROP PROCEDURE public.bh3_procedure(integer[], character varying[], timestamp without time zone, sensitivity_source, name, name, name, name, name, name, name, name, name, name, name, name, name, name, name, name, timestamp without time zone, boolean, boolean, boolean, integer);
+-- DROP FUNCTION public.bh3_entry(integer[], character varying[], timestamp without time zone, sensitivity_source, name, name, name, name, name, name, name, name, name, name, name, name, name, name, name, name, timestamp without time zone, boolean, boolean, boolean, integer);
 
-CREATE OR REPLACE PROCEDURE public.bh3_procedure(
+CREATE OR REPLACE FUNCTION public.bh3_entry(
 	boundary_filter integer[],
 	habitat_types_filter character varying[],
 	date_start timestamp without time zone,
@@ -28,8 +28,11 @@ CREATE OR REPLACE PROCEDURE public.bh3_procedure(
 	habitat_types_filter_negate boolean DEFAULT false,
 	remove_overlaps boolean DEFAULT false,
 	output_srid integer DEFAULT 4326)
-LANGUAGE 'plpgsql'
+    RETURNS boolean
+    LANGUAGE 'plpgsql'
 
+    COST 100
+    VOLATILE 
 AS $BODY$
 DECLARE
 	start_time timestamp;
@@ -83,11 +86,11 @@ BEGIN
 		
 		IF cell_size_degrees IS NULL OR cell_size_degrees < 0 THEN
 			RAISE INFO 'Failed to obtain a consisten cell size from tables in pressure schema %', pressure_schema;
-			RETURN;
+			RETURN false;
 		END IF;
 
 		RAISE INFO 'Calling bh3_boundary_subdivide: %', (clock_timestamp() - start_time);
-
+		
 		SELECT * 
 		FROM bh3_boundary_subdivide(
 			boundary_filter,
@@ -111,7 +114,7 @@ BEGIN
 				   output_schema)
 			USING 'bh3_boundary_subdivide', error_rec.exc_text, error_rec.exc_detail, error_rec.exc_hint;
 			error_count := error_count + 1;
-			RETURN;
+			RETURN false;
 		END IF;
 
 		RAISE INFO 'Calling bh3_habitat_boundary_clip: %', (clock_timestamp() - start_time);
@@ -145,7 +148,7 @@ BEGIN
 				   output_schema)
 			USING 'bh3_habitat_boundary_clip', error_rec.exc_text, error_rec.exc_detail, error_rec.exc_hint;
 			error_count := error_count + 1;
-			RETURN;
+			RETURN false;
 		END IF;
 
 		RAISE INFO 'Calling bh3_habitat_grid: %', (clock_timestamp() - start_time);
@@ -212,7 +215,7 @@ BEGIN
 				   output_schema)
 			USING 'bh3_sensitivity_layer_prep', error_rec.exc_text, error_rec.exc_detail, error_rec.exc_hint;
 			error_count := error_count + 1;
-			RETURN;
+			RETURN false;
 		END IF;
 
 		RAISE INFO 'Calling bh3_sensitivity_map: %', (clock_timestamp() - start_time);
@@ -242,7 +245,7 @@ BEGIN
 				   output_schema)
 			USING 'bh3_sensitivity_map', error_rec.exc_text, error_rec.exc_detail, error_rec.exc_hint;
 			error_count := error_count + 1;
-			RETURN;
+			RETURN false;
 		END IF;
 
 		RAISE INFO 'Calling bh3_disturbance_map: %', (clock_timestamp() - start_time);
@@ -295,10 +298,15 @@ BEGIN
 	EXECUTE format('DROP TABLE IF EXISTS %1$I.%2$I', output_schema, boundary_subdivide_union_table);
 
 	RAISE INFO 'Completed in %', (clock_timestamp() - start_time);
+	
+	RETURN true;
 END;
 $BODY$;
 
-COMMENT ON PROCEDURE public.bh3_procedure
+ALTER FUNCTION public.bh3_entry(integer[], character varying[], timestamp without time zone, sensitivity_source, name, name, name, name, name, name, name, name, name, name, name, name, name, name, name, name, timestamp without time zone, boolean, boolean, boolean, integer)
+    OWNER TO postgres;
+
+COMMENT ON FUNCTION public.bh3_entry(integer[], character varying[], timestamp without time zone, sensitivity_source, name, name, name, name, name, name, name, name, name, name, name, name, name, name, name, name, timestamp without time zone, boolean, boolean, boolean, integer)
     IS 'Purpose:
 Main entry point that starts a BH3 run. 
 This is called by the QGIS user interface and may be executed directly in pgAdmin or on the PostgreSQL command line.
@@ -334,6 +342,9 @@ boundary_filter_negate				boolean							If true condition built with boundary_fi
 habitat_types_filter_negate			boolean							If true condition built with habitat_types_filter is to be negated, i.e. EUNIS L3 codes in habitat_types_filter will be excluded. Defaults to false.
 remove_overlaps						boolean							If true overlaps will be removed from habitat_sensitivity_table (significantly increases processing time). Defaults to false.
 output_srid							integer							SRID of output tables (reprojecting greatly affects performance). Defaults to 4326.
+
+Returns:
+true on success, false on failure.
 
 Calls:
 bh3_get_pressure_csquares_size

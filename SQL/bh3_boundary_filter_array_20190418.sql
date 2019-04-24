@@ -78,6 +78,8 @@ ST_Union of the (possibly buffered) geometries, or if that fails an empty polygo
 Calls:
 No nested calls.';
 
+DROP AGGREGATE IF EXISTS public.bh3_safe_union(geometry);
+
 CREATE AGGREGATE public.bh3_safe_union(geometry)
 (
     sfunc = public.bh3_safe_union_transfn,

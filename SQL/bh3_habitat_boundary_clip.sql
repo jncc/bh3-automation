@@ -11,7 +11,7 @@ CREATE OR REPLACE FUNCTION public.bh3_habitat_boundary_clip(
 	sensitivity_schema name DEFAULT 'lut'::name,
 	sensitivity_table name DEFAULT 'sensitivity_broadscale_habitats'::name,
 	boundary_subdivide_schema name DEFAULT 'static'::name,
-	boundary_subdivide_table name DEFAULT 'static'::name,
+	boundary_subdivide_table name DEFAULT 'boundary_subdivide'::name,
 	habitat_types_filter_negate boolean DEFAULT false,
 	exclude_empty_mismatched_eunis_l3 boolean DEFAULT true,
 	remove_overlaps boolean DEFAULT false,
@@ -39,6 +39,19 @@ DECLARE
 	habitat_type_condition text;
 	left_join character varying;
 	negation text;
+	cand_cursor refcursor;
+	cand_row record;
+	error_count bigint;
+	geom_union geometry;
+	rec_count integer;
+	previous_gid bigint;
+	previous_hab_type character varying;
+	previous_eunis_l3 character varying;
+	previous_sensitivity_ab_su_num_max smallint;
+	previous_confidence_ab_su_num smallint;
+	previous_sensitivity_ab_ss_num_max smallint;
+	previous_confidence_ab_ss_num smallint;
+	
 
 BEGIN
 	BEGIN
@@ -100,47 +113,26 @@ BEGIN
 		RAISE INFO 'bh3_habitat_boundary_clip: Repaired % geometries in temporary table %: %', 
 			rows_affected, temp_table_habitat_boundary_intersect, (clock_timestamp() - start_time);
 
-		EXECUTE format('CREATE TEMP TABLE %1$I AS '
-					   'SELECT hab.gid'
-						   ',ST_Multi(ST_Union(hab.the_geom)) AS the_geom'
-						   ',hab.hab_type'
-						   ',hab.eunis_l3 '
-					   'FROM %2$I hab '
-					   'WHERE the_geom IS NOT NULL '
-						   'AND NOT ST_IsEmpty(the_geom) '
-						   'AND ST_GeometryType(the_geom) ~* %3$L '
-					   'GROUP BY hab.gid'
-						   ',hab.hab_type'
-						   ',hab.eunis_l3',
-					   temp_table_habitat_boundary_intersect_union,
-					   temp_table_habitat_boundary_intersect,
-					   'Polygon');
+		start_time := clock_timestamp();
 
-		GET DIAGNOSTICS rows_affected = ROW_COUNT;
-		RAISE INFO 'bh3_habitat_boundary_clip: Inserted % rows into temporary table %: %', 
-			rows_affected, temp_table_habitat_boundary_intersect_union, (clock_timestamp() - start_time);
+		EXECUTE format('CREATE INDEX sidx_%1$s_the_geom ON %1$I USING GIST(the_geom)', 
+					   temp_table_habitat_boundary_intersect);
+
+		RAISE INFO 'bh3_habitat_boundary_clip: Created spatial index on temporary table %: %', 
+			temp_table_habitat_boundary_intersect, (clock_timestamp() - start_time);
 
 		start_time := clock_timestamp();
 
-		CALL bh3_repair_geometries(NULL, temp_table_habitat_boundary_intersect_union);
-
-		GET DIAGNOSTICS rows_affected = ROW_COUNT;
-		RAISE INFO 'bh3_habitat_boundary_clip: Repaired % geometries in temporary table %: %', 
-			rows_affected, temp_table_habitat_boundary_intersect_union, (clock_timestamp() - start_time);
-
-		start_time := clock_timestamp();
-
-		EXECUTE format('ALTER TABLE %1$I ADD CONSTRAINT %1$s_pkey PRIMARY KEY(gid)',
-					   temp_table_habitat_boundary_intersect_union);
-		EXECUTE format('CREATE UNIQUE INDEX idx_%1$s_gid ON %1$I USING BTREE(gid)',
-					   temp_table_habitat_boundary_intersect_union);
-		EXECUTE format('CREATE INDEX idx_%1$s_eunis_l3gid ON %1$I USING BTREE(eunis_l3)',
-					   temp_table_habitat_boundary_intersect_union);
-
-		RAISE INFO 'bh3_habitat_boundary_clip: Indexed temporary table %: %', 
-			temp_table_habitat_boundary_intersect_union, (clock_timestamp() - start_time);
-
-		start_time := clock_timestamp();
+		/* remove any previous putput table left behind */
+		FOR tn IN 
+			EXECUTE format('SELECT c.relname '
+						   'FROM pg_class c '
+							   'JOIN pg_namespace n ON c.relnamespace = n.oid '
+						   'WHERE n.nspname = $1 AND c.relname IN($2)')
+			USING output_schema, output_table
+		LOOP
+			EXECUTE 'SELECT DropGeometryTable($1::text,$2::text)' USING output_schema, tn;
+		END LOOP;
 
 		/* create habitat sensitivity output table */
 		EXECUTE format('CREATE TABLE %1$I.%2$I('
@@ -160,19 +152,20 @@ BEGIN
 			left_join := 'LEFT ';
 		END IF;
 
-		/* populate output table with clipped habitat geometries joined to sensitivity scores */
-		EXECUTE format('INSERT INTO %1$I.%2$I '
-					   '('
-						   'gid'
-						   ',the_geom'
-						   ',hab_type'
-						   ',eunis_l3'
-						   ',sensitivity_ab_su_num_max'
-						   ',confidence_ab_su_num'
-						   ',sensitivity_ab_ss_num_max'
-						   ',confidence_ab_ss_num'
-					   ') '
-					   'SELECT hab.gid'
+		previous_gid := NULL;
+		previous_hab_type := NULL;
+		previous_eunis_l3 := NULL;
+		previous_sensitivity_ab_su_num_max := NULL;
+		previous_confidence_ab_su_num := NULL;
+		previous_sensitivity_ab_ss_num_max := NULL;
+		previous_confidence_ab_ss_num := NULL;
+		geom_union := NULL;
+		rec_count := 0;
+		rows_affected := 0;
+
+		OPEN cand_cursor FOR 
+		EXECUTE format('SELECT ROW_NUMBER() OVER(PARTITION BY hab.gid,hab.hab_type,hab.eunis_l3) AS row_id'
+						   ',hab.gid'
 						   ',hab.the_geom'
 						   ',hab.hab_type'
 						   ',hab.eunis_l3'
@@ -180,13 +173,109 @@ BEGIN
 						   ',sbsh.confidence_ab_su_num'
 						   ',sbsh.sensitivity_ab_ss_num_max'
 						   ',sbsh.confidence_ab_ss_num '
-					   'FROM %3$I hab '
-						   '%4$s JOIN %5$I.%6$I sbsh ON hab.eunis_l3 = sbsh.eunis_l3_code', 
-					   output_schema, output_table, temp_table_habitat_boundary_intersect_union,
-					   left_join, sensitivity_schema, sensitivity_table);
+					   'FROM %1$I hab '
+						   '%2$s JOIN %3$I.%4$I sbsh ON hab.eunis_l3 = sbsh.eunis_l3_code '
+					   'WHERE the_geom IS NOT NULL '
+						   'AND NOT ST_IsEmpty(the_geom) '
+						   'AND ST_GeometryType(the_geom) ~* $1',
+					   temp_table_habitat_boundary_intersect, left_join,
+					   sensitivity_schema, sensitivity_table)
+		USING 'Polygon';
+
+		FETCH cand_cursor INTO cand_row;
+		IF FOUND THEN
+			previous_gid := cand_row.gid;
+			previous_hab_type := cand_row.hab_type;
+			previous_eunis_l3 := cand_row.eunis_l3;
+			previous_sensitivity_ab_su_num_max := cand_row.sensitivity_ab_su_num_max;
+			previous_confidence_ab_su_num := cand_row.confidence_ab_su_num;
+			previous_sensitivity_ab_ss_num_max := cand_row.sensitivity_ab_ss_num_max;
+			previous_confidence_ab_ss_num := cand_row.confidence_ab_ss_num;
+			geom_union := cand_row.the_geom;
+		END IF;
+
+		LOOP
+			BEGIN
+				FETCH cand_cursor INTO cand_row;
+
+				rec_count := rec_count + 1;
+
+				IF FOUND AND cand_row.gid = previous_gid AND cand_row.hab_type = previous_hab_type AND cand_row.eunis_l3 = previous_eunis_l3 THEN
+					IF geom_union IS NULL THEN
+						geom_union := cand_row.the_geom;
+					ELSE
+						geom_union := bh3_safe_union_transfn(geom_union, cand_row.the_geom);
+					END IF;
+				ELSE
+					IF previous_gid IS NOT NULL THEN
+						/* repair union geometry if necessary */
+						IF NOT ST_IsValid(geom_union) THEN
+							geom_union := ST_Multi(ST_Buffer(geom_union, 0));
+						ELSE
+							geom_union := ST_Multi(geom_union);
+						END IF;
+
+						EXECUTE format('INSERT INTO %1$I.%2$I '
+									   '('
+										   'gid'
+										   ',the_geom'
+										   ',hab_type'
+										   ',eunis_l3'
+										   ',sensitivity_ab_su_num_max'
+										   ',confidence_ab_su_num'
+										   ',sensitivity_ab_ss_num_max'
+										   ',confidence_ab_ss_num'
+									   ') '
+									   'VALUES($1,$2,$3,$4,$5,$6,$7,$8)', 
+									   output_schema, output_table) 
+						USING previous_gid,
+							geom_union,
+							previous_hab_type,
+							previous_eunis_l3,
+							previous_sensitivity_ab_su_num_max,
+							previous_confidence_ab_su_num,
+							previous_sensitivity_ab_ss_num_max,
+							previous_confidence_ab_ss_num;
+
+						rows_affected := rows_affected + 1;
+						RAISE INFO 'bh3_habitat_boundary_clip: Looping over cursor. Row: %. Inserted row: %. Runtime: %', 
+							rec_count, rows_affected, (clock_timestamp() - start_time);
+					END IF;
+
+					IF FOUND THEN
+						/* begin next window */
+						previous_gid := cand_row.gid;
+						previous_hab_type := cand_row.hab_type;
+						previous_eunis_l3 := cand_row.eunis_l3;
+						previous_sensitivity_ab_su_num_max := cand_row.sensitivity_ab_su_num_max;
+						previous_confidence_ab_su_num := cand_row.confidence_ab_su_num;
+						previous_sensitivity_ab_ss_num_max := cand_row.sensitivity_ab_ss_num_max;
+						previous_confidence_ab_ss_num := cand_row.confidence_ab_ss_num;
+						geom_union := cand_row.the_geom;
+					ELSE
+						EXIT;
+					END IF;
+				END IF;
+			EXCEPTION WHEN OTHERS THEN
+				GET STACKED DIAGNOSTICS exc_text = MESSAGE_TEXT,
+										  exc_detail = PG_EXCEPTION_DETAIL,
+										  exc_hint = PG_EXCEPTION_HINT;
+				error_count := error_count + 1;
+				RAISE INFO 'Error. Text: %. Detail: %. Hint: %.', exc_text, exc_detail, exc_hint;
+			END;
+		END LOOP;
+
+		CLOSE cand_cursor;
+
+		RAISE INFO 'bh3_habitat_boundary_clip: Inserted % rows into table %.%: %', 
+			rows_affected, output_schema, output_table, (clock_timestamp() - start_time);
+
+		start_time := clock_timestamp();
+
+		CALL bh3_repair_geometries(output_schema, output_table);
 
 		GET DIAGNOSTICS rows_affected = ROW_COUNT;
-		RAISE INFO 'bh3_habitat_boundary_clip: Inserted % rows into output table %.%: %', 
+		RAISE INFO 'bh3_habitat_boundary_clip: Repaired % geometries in table %.%: %', 
 			rows_affected, output_schema, output_table, (clock_timestamp() - start_time);
 
 		start_time := clock_timestamp();
@@ -197,6 +286,8 @@ BEGIN
 
 		RAISE INFO 'bh3_habitat_boundary_clip: indexed output table %.%: %', 
 			output_schema, output_table, (clock_timestamp() - start_time);
+
+		start_time := clock_timestamp();
 
 		/* if requested remove overlaps from habitat sensitivity output table */
 		IF remove_overlaps THEN

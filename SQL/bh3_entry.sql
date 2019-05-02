@@ -1,6 +1,6 @@
--- FUNCTION: public.bh3_entry(integer[], character varying[], timestamp without time zone, sensitivity_source, name, name, name, name, name, name, name, name, name, name, name, name, name, name, name, name, timestamp without time zone, boolean, boolean, boolean, integer)
+-- FUNCTION: public.bh3_entry(integer[], character varying[], timestamp without time zone, sensitivity_source, name, name, character varying, name, name, name, name, name, name, name, name, name, name, name, name, name, name, name, timestamp without time zone, boolean, boolean, boolean, integer)
 
--- DROP FUNCTION public.bh3_entry(integer[], character varying[], timestamp without time zone, sensitivity_source, name, name, name, name, name, name, name, name, name, name, name, name, name, name, name, name, timestamp without time zone, boolean, boolean, boolean, integer);
+-- DROP FUNCTION public.bh3_entry(integer[], character varying[], timestamp without time zone, sensitivity_source, name, name, character varying, name, name, name, name, name, name, name, name, name, name, name, name, name, name, name, timestamp without time zone, boolean, boolean, boolean, integer);
 
 CREATE OR REPLACE FUNCTION public.bh3_entry(
 	boundary_filter integer[],
@@ -9,6 +9,7 @@ CREATE OR REPLACE FUNCTION public.bh3_entry(
 	species_sensitivity_source_table sensitivity_source,
 	pressure_schema name,
 	output_schema name,
+	output_owner character varying DEFAULT NULL::character varying,
 	boundary_schema name DEFAULT 'static'::name,
 	boundary_table name DEFAULT 'official_country_waters_wgs84'::name,
 	habitat_schema name DEFAULT 'static'::name,
@@ -20,10 +21,12 @@ CREATE OR REPLACE FUNCTION public.bh3_entry(
 	species_sensitivity_max_table name DEFAULT 'species_sensitivity_max'::name,
 	species_sensitivity_mode_table name DEFAULT 'species_sensitivity_mode'::name,
 	sensitivity_map_table name DEFAULT 'sensitivity_map'::name,
+	pressure_map_table name DEFAULT 'pressure_map'::name,
 	disturbance_map_table name DEFAULT 'disturbance_map'::name,
 	sar_surface_column name DEFAULT 'sar_surface'::name,
 	sar_subsurface_column name DEFAULT 'sar_subsurface'::name,
-	date_end timestamp without time zone DEFAULT now(),
+	date_end timestamp without time zone DEFAULT now(
+	),
 	boundary_filter_negate boolean DEFAULT false,
 	habitat_types_filter_negate boolean DEFAULT false,
 	remove_overlaps boolean DEFAULT false,
@@ -52,10 +55,16 @@ BEGIN
 	error_count := 0;
 	boundary_subdivide_table := 'boundary_subdivide'::name;
 	boundary_subdivide_union_table := 'boundary'::name;
-	
+
 	BEGIN
 		/* create output_schema if it doesn't already exist */
-		EXECUTE format('CREATE SCHEMA IF NOT EXISTS %1$I', output_schema);
+		IF output_owner IS NOT NULL THEN
+			EXECUTE format('SET ROLE %1$I', output_owner);
+			EXECUTE format('DROP SCHEMA IF EXISTS %1$I CASCADE', output_schema);
+			EXECUTE format('CREATE SCHEMA IF NOT EXISTS %1$I AUTHORIZATION %2$I', output_schema, output_owner);
+		ELSE
+			EXECUTE format('CREATE SCHEMA IF NOT EXISTS %1$I', output_schema);
+		END IF;
 
 		/* drop any previous error_log table in output_schema */
 		EXECUTE format('DROP TABLE IF EXISTS %1$I.error_log', output_schema);
@@ -83,14 +92,14 @@ BEGIN
 			,sar_subsurface_column
 			,output_srid
 		) INTO cell_size_degrees;
-		
+
 		IF cell_size_degrees IS NULL OR cell_size_degrees < 0 THEN
 			RAISE INFO 'Failed to obtain a consisten cell size from tables in pressure schema %', pressure_schema;
 			RETURN false;
 		END IF;
 
 		RAISE INFO 'Calling bh3_boundary_subdivide: %', (clock_timestamp() - start_time);
-		
+
 		SELECT * 
 		FROM bh3_boundary_subdivide(
 			boundary_filter,
@@ -263,6 +272,7 @@ BEGIN
 				,date_end
 				,boundary_subdivide_union_table
 				,sensitivity_map_table
+				,pressure_map_table
 				,disturbance_map_table
 				,sar_surface_column
 				,sar_subsurface_column
@@ -293,20 +303,24 @@ BEGIN
 		RAISE INFO 'Error detail: %', exc_detail;
 		RAISE INFO 'Error hint: %', exc_hint;
 	END;
-	
+
 	EXECUTE format('DROP TABLE IF EXISTS %1$I.%2$I', output_schema, boundary_subdivide_table);
 	EXECUTE format('DROP TABLE IF EXISTS %1$I.%2$I', output_schema, boundary_subdivide_union_table);
 
 	RAISE INFO 'Completed in %', (clock_timestamp() - start_time);
 	
+	IF output_owner IS NOT NULL THEN
+		RESET ROLE;
+	END IF;
+
 	RETURN true;
 END;
 $BODY$;
 
-ALTER FUNCTION public.bh3_entry(integer[], character varying[], timestamp without time zone, sensitivity_source, name, name, name, name, name, name, name, name, name, name, name, name, name, name, name, name, timestamp without time zone, boolean, boolean, boolean, integer)
+ALTER FUNCTION public.bh3_entry(integer[], character varying[], timestamp without time zone, sensitivity_source, name, name, character varying, name, name, name, name, name, name, name, name, name, name, name, name, name, name, name, timestamp without time zone, boolean, boolean, boolean, integer)
     OWNER TO postgres;
 
-COMMENT ON FUNCTION public.bh3_entry(integer[], character varying[], timestamp without time zone, sensitivity_source, name, name, name, name, name, name, name, name, name, name, name, name, name, name, name, name, timestamp without time zone, boolean, boolean, boolean, integer)
+COMMENT ON FUNCTION public.bh3_entry(integer[], character varying[], timestamp without time zone, sensitivity_source, name, name, character varying, name, name, name, name, name, name, name, name, name, name, name, name, name, name, name, timestamp without time zone, boolean, boolean, boolean, integer)
     IS 'Purpose:
 Main entry point that starts a BH3 run. 
 This is called by the QGIS user interface and may be executed directly in pgAdmin or on the PostgreSQL command line.
@@ -323,6 +337,7 @@ date_start							timestamp without time zone		Earliest date for Marine Recorder 
 species_sensitivity_source_table	sensitivity_source				Source table for habitat sensitivity scores (enum value one of { ''broadscale_habitats'', ''eco_groups'', ''rock'', ''rock_eco_groups'' }).
 pressure_schema						name							Schema in which pressure source tables are located (all tables in this schema that have the required columns will be used).
 output_schema						name							Schema in which output tables will be created (will be created if it does not already exist; tables in it will be overwritten).
+output_owner						character varying				Role that will own output schema and tables. Defaults to NULL, which means the user running the procedure.
 boundary_schema						name							Schema of table containing AOI boundary polygons. Defaults to ''static''.
 boundary_table						name							Name of table containing AOI boundary polygons. Defaults to ''official_country_waters_wgs84''.
 habitat_schema						name							Habitat table schema. Defaults to ''static''.
@@ -334,6 +349,7 @@ habitat_sensitivity_grid_table		name							Name of gridded habitat sensitivity o
 species_sensitivity_max_table		name							Table name of species sensitivity maximum map. Defaults to ''species_sensitivity_max''.
 species_sensitivity_mode_table		name							Table name of species sensitivity mode map. Defaults to ''species_sensitivity_mode''.
 sensitivity_map_table				name							Table name of output sensitivity map. Defaults to ''sensitivity_map''.
+pressure_map_table					name							Table name of pressure map, created in output_schema. Defaults to ''pressure_map''.
 disturbance_map_table				name							Table name of output disturbance map. Defaults to ''disturbance_map''.
 sar_surface_column					name							SAR surface column name in pressure source tables. Defaults to ''sar_surface''.
 sar_subsurface_column				name							SAR sub-surface column name in pressure source tables. Defaults to ''sar_subsurface''.

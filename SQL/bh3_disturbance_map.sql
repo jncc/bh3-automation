@@ -1,6 +1,6 @@
--- FUNCTION: public.bh3_disturbance_map(name, name, name, name, timestamp without time zone, timestamp without time zone, name, name, name, name, name, integer)
+-- FUNCTION: public.bh3_disturbance_map(name, name, name, name, timestamp without time zone, timestamp without time zone, name, name, name, name, name, name, integer)
 
--- DROP FUNCTION public.bh3_disturbance_map(name, name, name, name, timestamp without time zone, timestamp without time zone, name, name, name, name, name, integer);
+-- DROP FUNCTION public.bh3_disturbance_map(name, name, name, name, timestamp without time zone, timestamp without time zone, name, name, name, name, name, name, integer);
 
 CREATE OR REPLACE FUNCTION public.bh3_disturbance_map(
 	boundary_schema name,
@@ -8,10 +8,10 @@ CREATE OR REPLACE FUNCTION public.bh3_disturbance_map(
 	sensitivity_map_schema name,
 	output_schema name,
 	date_start timestamp without time zone,
-	date_end timestamp without time zone DEFAULT now(
-	),
+	date_end timestamp without time zone DEFAULT now(),
 	boundary_table name DEFAULT 'boundary'::name,
 	sensitivity_map_table name DEFAULT 'sensitivity_map'::name,
+	pressure_map_table name DEFAULT 'pressure_map'::name,
 	output_table name DEFAULT 'disturbance_map'::name,
 	sar_surface_column name DEFAULT 'sar_surface'::name,
 	sar_subsurface_column name DEFAULT 'sar_subsurface'::name,
@@ -28,7 +28,6 @@ DECLARE
 	exc_detail character varying;
 	exc_hint character varying;
 	start_time timestamp;
-	pressure_csquares_table name;
 	srid_sen integer;
 	geom_exp_sen character varying;
 	transform_geom boolean;
@@ -50,8 +49,6 @@ DECLARE
 BEGIN
 	BEGIN
 		start_time := clock_timestamp();
-		
-		pressure_csquares_table := 'pressure_csquares';
 
 		RAISE INFO 'Deleting previous output table %.%', output_schema, output_table;
 	
@@ -60,28 +57,23 @@ BEGIN
 			EXECUTE format('SELECT c.relname '
 						   'FROM pg_class c '
 							   'JOIN pg_namespace n ON c.relnamespace = n.oid '
-						   'WHERE n.nspname = $1 AND c.relname IN($2)')
-			USING output_schema, output_table 
+						   'WHERE n.nspname = $1 AND c.relname IN($2,$3)')
+			USING output_schema, output_table, pressure_map_table 
 		LOOP
 			EXECUTE 'SELECT DropGeometryTable($1::text,$2::text)' USING output_schema, tn;
 		END LOOP;
 
-		RAISE INFO 'Deleting previous temp table %', pressure_csquares_table;
-	
-		/* drop any previous pressure c-squares temporary table left behind */
-		CALL bh3_drop_temp_table(pressure_csquares_table);
+		RAISE INFO 'Creating pressure grid table %.%', output_schema, pressure_map_table;
 
-		RAISE INFO 'Creating pressure grid table %', pressure_csquares_table;
-	
 		/* store pressure c-squares in temporary table */
-		EXECUTE format('CREATE TEMP TABLE %1$I AS '
+		EXECUTE format('CREATE TABLE %1$I.%2$I AS '
 					   'SELECT * FROM bh3_get_pressure_csquares($1,$2,$3,$4,$5,$6,$7,$8)',
-					   pressure_csquares_table)
+					   output_schema, pressure_map_table)
 		USING boundary_schema, pressure_schema, date_start, date_end, boundary_table, 
 			sar_surface_column, sar_subsurface_column, output_srid;
 	
-		EXECUTE format('CREATE INDEX sidx_%1$s_the_geom ON %1$I USING GIST(the_geom)', pressure_csquares_table);
-		EXECUTE format('CREATE UNIQUE INDEX idx_%1$s_gid ON %1$I USING BTREE(gid)', pressure_csquares_table);
+		EXECUTE format('CREATE INDEX sidx_%2$s_the_geom ON %1$I.%2$I USING GIST(the_geom)', output_schema, pressure_map_table);
+		EXECUTE format('CREATE UNIQUE INDEX idx_%2$s_gid ON %1$I.%2$I USING BTREE(gid)', output_schema, pressure_map_table);
 
 		RAISE INFO 'Creating output table %.%', output_schema, output_table;
 
@@ -179,8 +171,8 @@ BEGIN
 						   ',%1$s AS geom_sen'
 						   ',prs.the_geom AS geom_prs '
 					   'FROM %2$I.%3$I sen '
-						   'JOIN %4$I prs ON ST_Intersects(%1$s,prs.the_geom)',
-					   geom_exp_sen, sensitivity_map_schema, sensitivity_map_table, pressure_csquares_table);
+						   'JOIN %4$I.%5$I prs ON ST_Intersects(%1$s,prs.the_geom)',
+					   geom_exp_sen, sensitivity_map_schema, sensitivity_map_table, output_schema, pressure_map_table);
 
 		RAISE INFO 'Opening cursor for %', sqlstmt;
 
@@ -254,9 +246,6 @@ BEGIN
 		/* index pressure map output table */
 		EXECUTE format('CREATE INDEX sidx_%2$s_the_geom ON %1$I.%2$I USING GIST(the_geom)', output_schema, output_table);
 		EXECUTE format('CREATE UNIQUE INDEX idx_%2$s_gid ON %1$I.%2$I USING BTREE(gid)', output_schema, output_table);
-		
-		/* drop pressure c-squares temporary table */
-		CALL bh3_drop_temp_table(pressure_csquares_table);
 
 		/* create return table from error keys and messages collected in insert loop */
 		i := 1;
@@ -278,10 +267,10 @@ BEGIN
 END;
 $BODY$;
 
-ALTER FUNCTION public.bh3_disturbance_map(name, name, name, name, timestamp without time zone, timestamp without time zone, name, name, name, name, name, integer)
+ALTER FUNCTION public.bh3_disturbance_map(name, name, name, name, timestamp without time zone, timestamp without time zone, name, name, name, name, name, name, integer)
     OWNER TO postgres;
 
-COMMENT ON FUNCTION public.bh3_disturbance_map(name, name, name, name, timestamp without time zone, timestamp without time zone, name, name, name, name, name, integer)
+COMMENT ON FUNCTION public.bh3_disturbance_map(name, name, name, name, timestamp without time zone, timestamp without time zone, name, name, name, name, name, name, integer)
     IS 'Purpose:
 Creates the disturbance map from sensitivity and pressure maps.
 
@@ -297,10 +286,11 @@ boundary_schema			name							Schema of table containing single AOI boundary poly
 pressure_schema			name							Schema in which pressure source tables are located (all tables in this schema that have the required columns will be used).
 sensitivity_map_schema	name							Schema in which sensitivity map table is located.
 output_schema			name							Schema in which output tables will be created (will be created if it does not already exist; tables in it will be overwritten).
-date_start				timestamp without time zone		Earliest date for Marine Recorder spcies samples to be included.
+date_start				timestamp without time zone		Earliest date for Marine Recorder species samples to be included.
 date_end				timestamp without time zone		Latest date for Marine Recorder species samples and pressure data to be included. Defaults to current date and time.
 boundary_table			name							Name of table containing single AOI boundary polygon and bounding box. Defaults to ''boundary''.
 sensitivity_map_table	name							Table name of sensitivity map. Defaults to ''sensitivity_map''.
+pressure_map_table		name							Table name of pressure map, created in output_schema. Defaults to ''pressure_map''.
 output_table			name							Table name of output disturbance map. Defaults to ''disturbance_map''.
 sar_surface_column		name							SAR surface column name in pressure source tables. Defaults to ''sar_surface''.
 sar_subsurface_column	name							SAR sub-surface column name in pressure source tables. Defaults to ''sar_subsurface''.

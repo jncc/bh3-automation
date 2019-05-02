@@ -53,15 +53,11 @@ BEGIN
 		RAISE INFO 'Deleting previous output table %.%', output_schema, output_table;
 	
 		/* clean up any previous output left behind */
-		FOR tn IN 
-			EXECUTE format('SELECT c.relname '
-						   'FROM pg_class c '
-							   'JOIN pg_namespace n ON c.relnamespace = n.oid '
-						   'WHERE n.nspname = $1 AND c.relname IN($2,$3)')
-			USING output_schema, output_table, pressure_map_table 
-		LOOP
-			EXECUTE 'SELECT DropGeometryTable($1::text,$2::text)' USING output_schema, tn;
-		END LOOP;
+		CALL bh3_drop_spatial_tables(
+			ARRAY[
+				ARRAY[output_schema, output_table]::name[]
+				,ARRAY[output_schema, pressure_map_table]::name[]
+			]::name[][]);
 
 		RAISE INFO 'Creating pressure grid table %.%', output_schema, pressure_map_table;
 
@@ -72,8 +68,11 @@ BEGIN
 		USING boundary_schema, pressure_schema, date_start, date_end, boundary_table, 
 			sar_surface_column, sar_subsurface_column, output_srid;
 	
-		EXECUTE format('CREATE INDEX sidx_%2$s_the_geom ON %1$I.%2$I USING GIST(the_geom)', output_schema, pressure_map_table);
-		EXECUTE format('CREATE UNIQUE INDEX idx_%2$s_gid ON %1$I.%2$I USING BTREE(gid)', output_schema, pressure_map_table);
+		CALL bh3_index(output_schema, pressure_map_table, 
+					   ARRAY[
+						   ARRAY['the_geom','s']
+						   ,ARRAY['gid','u']
+					   ]);
 
 		RAISE INFO 'Creating output table %.%', output_schema, output_table;
 
@@ -244,8 +243,11 @@ BEGIN
 		CLOSE cand_cursor;
 
 		/* index pressure map output table */
-		EXECUTE format('CREATE INDEX sidx_%2$s_the_geom ON %1$I.%2$I USING GIST(the_geom)', output_schema, output_table);
-		EXECUTE format('CREATE UNIQUE INDEX idx_%2$s_gid ON %1$I.%2$I USING BTREE(gid)', output_schema, output_table);
+		CALL bh3_index(output_schema, output_table, 
+					   ARRAY[
+						   ARRAY['the_geom','s']
+						   ,ARRAY['gid','u']
+					   ]);
 
 		/* create return table from error keys and messages collected in insert loop */
 		i := 1;

@@ -37,15 +37,11 @@ BEGIN
 		start_time := clock_timestamp();
 
 		/* clean up any previous output left behind */
-		FOR tn IN 
-			EXECUTE format('SELECT c.relname '
-						   'FROM pg_class c '
-							   'JOIN pg_namespace n ON c.relnamespace = n.oid '
-						   'WHERE n.nspname = $1 AND c.relname IN($2,$3)')
-			USING output_schema, output_table, output_table_subdivide 
-		LOOP
-			EXECUTE 'SELECT DropGeometryTable($1::text,$2::text)' USING output_schema, tn;
-		END LOOP;
+		CALL bh3_drop_spatial_tables(
+			ARRAY[
+				ARRAY[output_schema, output_table]::name[]
+				,ARRAY[output_schema, output_table_subdivide]::name[]
+			]::name[][]);
 
 		srid_bnd := bh3_find_srid(boundary_schema, boundary_table, 'the_geom'::name);
 		IF srid_bnd != 4326 THEN
@@ -120,10 +116,11 @@ BEGIN
 
 		EXECUTE format('ALTER TABLE %1$I.%2$I ADD CONSTRAINT %2$s_pkey PRIMARY KEY(gid)', 
 					    output_schema, output_table_subdivide);
-		EXECUTE format('CREATE UNIQUE INDEX idx_%2$s_gid ON %1$I.%2$I USING BTREE(gid)', 
-					   output_schema, output_table_subdivide);
-		EXECUTE format('CREATE INDEX sidx_%2$s_the_geom ON %1$I.%2$I USING GIST(the_geom)', 
-					   output_schema, output_table_subdivide);
+		CALL bh3_index(output_schema, output_table_subdivide, 
+					   ARRAY[
+						   ARRAY['the_geom','s']
+						   ,ARRAY['gid','u']
+					   ]);
 
 		RAISE INFO 'bh3_boundary_subdivide: Indexed table %.%: %', 
 			output_schema, output_table_subdivide, (clock_timestamp() - start_time);

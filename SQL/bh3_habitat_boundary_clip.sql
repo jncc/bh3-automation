@@ -51,7 +51,6 @@ DECLARE
 	previous_confidence_ab_su_num smallint;
 	previous_sensitivity_ab_ss_num_max smallint;
 	previous_confidence_ab_ss_num smallint;
-	
 
 BEGIN
 	BEGIN
@@ -115,8 +114,10 @@ BEGIN
 
 		start_time := clock_timestamp();
 
-		EXECUTE format('CREATE INDEX sidx_%1$s_the_geom ON %1$I USING GIST(the_geom)', 
-					   temp_table_habitat_boundary_intersect);
+		CALL bh3_index(NULL, temp_table_habitat_boundary_intersect, 
+					   ARRAY[
+						   ARRAY['the_geom','s']
+					   ]);
 
 		RAISE INFO 'bh3_habitat_boundary_clip: Created spatial index on temporary table %: %', 
 			temp_table_habitat_boundary_intersect, (clock_timestamp() - start_time);
@@ -124,15 +125,10 @@ BEGIN
 		start_time := clock_timestamp();
 
 		/* remove any previous putput table left behind */
-		FOR tn IN 
-			EXECUTE format('SELECT c.relname '
-						   'FROM pg_class c '
-							   'JOIN pg_namespace n ON c.relnamespace = n.oid '
-						   'WHERE n.nspname = $1 AND c.relname IN($2)')
-			USING output_schema, output_table
-		LOOP
-			EXECUTE 'SELECT DropGeometryTable($1::text,$2::text)' USING output_schema, tn;
-		END LOOP;
+		CALL bh3_drop_spatial_tables(
+			ARRAY[
+				ARRAY[output_schema, output_table]::name[]
+			]::name[][]);
 
 		/* create habitat sensitivity output table */
 		EXECUTE format('CREATE TABLE %1$I.%2$I('
@@ -281,8 +277,11 @@ BEGIN
 		start_time := clock_timestamp();
 
 		/* index habitat sensitivity output table */
-		EXECUTE format('CREATE INDEX sidx_%2$s_the_geom ON %1$I.%2$I USING GIST(the_geom)', output_schema, output_table);
-		EXECUTE format('CREATE UNIQUE INDEX idx_%2$s_gid ON %1$I.%2$I USING BTREE(gid)', output_schema, output_table);
+		CALL bh3_index(output_schema, output_table, 
+					   ARRAY[
+						   ARRAY['the_geom','s']
+						   ,ARRAY['gid','u']
+					   ]);
 
 		RAISE INFO 'bh3_habitat_boundary_clip: indexed output table %.%: %', 
 			output_schema, output_table, (clock_timestamp() - start_time);

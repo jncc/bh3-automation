@@ -16,6 +16,7 @@ CALL public.bh3_procedure(
 	,'species_sensitivity_max'::name			--species_sensitivity_max_table name DEFAULT 'species_sensitivity_max'::name
 	,'species_sensitivity_mode'::name			--species_sensitivity_mode_table name DEFAULT 'species_sensitivity_mode'::name
 	,'sensitivity_map'::name					--sensitivity_map_table name DEFAULT 'sensitivity_map'::name
+	,'pressure_map'::name						--pressure_map_table name DEFAULT 'pressure_map'::name,
 	,'disturbance_map'::name					--disturbance_map_table name DEFAULT 'disturbance_map'::name
 	,'sar_surface'::name						--sar_surface_column name DEFAULT 'sar_surface'::name
 	,'sar_subsurface'::name						--sar_subsurface_column name DEFAULT 'sar_subsurface'::name

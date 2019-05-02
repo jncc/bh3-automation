@@ -45,15 +45,10 @@ BEGIN
 		aoi_grid_table := 'aoi_grid'::name;
 
 		/* clean up any previous output left behind */
-		FOR tn IN 
-			EXECUTE format('SELECT c.relname '
-						   'FROM pg_class c '
-							   'JOIN pg_namespace n ON c.relnamespace = n.oid '
-						   'WHERE n.nspname = $1 AND c.relname IN($2)')
-			USING output_schema, output_table 
-		LOOP
-			EXECUTE 'SELECT DropGeometryTable($1::text,$2::text)' USING output_schema, tn;
-		END LOOP;
+		CALL bh3_drop_spatial_tables(
+			ARRAY[
+				ARRAY[output_schema, output_table]::name[]
+			]::name[][]);
 
 		/* clean up any previous temp table left behind */
 		CALL bh3_drop_temp_table(aoi_grid_table);
@@ -92,8 +87,11 @@ BEGIN
 		USING boundary_schema, boundary_table, cell_size_degrees;
 
 		/* index gridded habitat sensitivity output table */
-		EXECUTE format('CREATE INDEX sidx_%1$s_the_geom ON %1$I USING GIST(the_geom)', aoi_grid_table);
-		EXECUTE format('CREATE UNIQUE INDEX idx_%1$s_gid ON %1$I USING BTREE(gid)', aoi_grid_table);
+		CALL bh3_index(NULL, aoi_grid_table, 
+					   ARRAY[
+						   ARRAY['the_geom','s']
+						   ,ARRAY['gid','u']
+					   ]);
 
 		/* create cursor spatially joining habitat sensitivity output table and c-square grid covering AOI */
 		OPEN cand_cursor FOR
@@ -167,8 +165,11 @@ BEGIN
 		CLOSE cand_cursor;
 
 		/* index gridded habitat sensitivity output table */
-		EXECUTE format('CREATE INDEX sidx_%2$s_the_geom ON %1$I.%2$I USING GIST(the_geom)', output_schema, output_table);
-		EXECUTE format('CREATE UNIQUE INDEX idx_%2$s_gid ON %1$I.%2$I USING BTREE(gid)', output_schema, output_table);
+		CALL bh3_index(output_schema, output_table, 
+					   ARRAY[
+						   ARRAY['the_geom','s']
+						   ,ARRAY['gid','u']
+					   ]);
 
 		/* drop aoi_grid temp table  */
 		CALL bh3_drop_temp_table(aoi_grid_table);

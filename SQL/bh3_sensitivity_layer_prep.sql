@@ -8,8 +8,7 @@ CREATE OR REPLACE FUNCTION public.bh3_sensitivity_layer_prep(
 	output_schema name,
 	sensitivity_source_table sensitivity_source,
 	date_start timestamp without time zone,
-	date_end timestamp without time zone DEFAULT now(
-	),
+	date_end timestamp without time zone DEFAULT now(),
 	boundary_table name DEFAULT 'official_country_waters_wgs84'::name,
 	habitat_types_filter character varying[] DEFAULT NULL::character varying[],
 	habitat_types_filter_negate boolean DEFAULT false,
@@ -46,15 +45,11 @@ BEGIN
 		start_time := clock_timestamp();
 
 		/* clean up any previous output left behind */
-		FOR tn IN 
-			EXECUTE format('SELECT c.relname '
-						   'FROM pg_class c '
-							   'JOIN pg_namespace n ON c.relnamespace = n.oid '
-						   'WHERE n.nspname = $1 AND c.relname IN($2,$3)')
-			USING output_schema, output_table_max, output_table_mode 
-		LOOP
-			EXECUTE 'SELECT DropGeometryTable($1::text,$2::text)' USING output_schema, tn;
-		END LOOP;
+		CALL bh3_drop_spatial_tables(
+			ARRAY[
+				ARRAY[output_schema, output_table_max]::name[]
+				,ARRAY[output_schema, output_table_mode]::name[]
+			]::name[][]);
 
 		/* remove any previous species clipped temporary table left behind */
 		CALL bh3_drop_temp_table(species_clip_table);
@@ -93,10 +88,13 @@ BEGIN
 
 		start_time := clock_timestamp();
 
-		EXECUTE format('CREATE INDEX sidx_%1$s_the_geom ON %1$I USING GIST(the_geom)', species_clip_table);
-		EXECUTE format('CREATE INDEX idx_%1$s_gid ON %1$I USING BTREE(gid)', species_clip_table);
-		EXECUTE format('CREATE INDEX idx_%1$s_sensitivity_ab_su_num ON %1$I USING BTREE(sensitivity_ab_su_num)', species_clip_table);
-		EXECUTE format('CREATE INDEX idx_%1$s_sensitivity_ab_ss_num ON %1$I USING BTREE(sensitivity_ab_ss_num)', species_clip_table);
+		CALL bh3_index(NULL, species_clip_table, 
+					   ARRAY[
+						   ARRAY['the_geom','s']
+						   ,ARRAY['gid','']
+						   ,ARRAY['sensitivity_ab_su_num','']
+						   ,ARRAY['sensitivity_ab_ss_num','']
+					   ]);
 
 		RAISE INFO 'bh3_sensitivity_layer_prep: Indexed temporary table %: %', 
 			species_clip_table, (clock_timestamp() - start_time);
@@ -171,19 +169,16 @@ BEGIN
 
 		start_time := clock_timestamp();
 
-		/* create indexes on species sensitivity maximum table */
-		EXECUTE format('CREATE INDEX sidx_%2$I_the_geom ON %1$I.%2$I USING GIST(the_geom)',
-					   output_schema, output_table_max);
-		EXECUTE format('CREATE UNIQUE INDEX idx_%2$I_gid ON %1$I.%2$I USING BTREE(gid)',
-					   output_schema, output_table_max);
-		EXECUTE format('CREATE INDEX idx_%2$I_hab_type ON %1$I.%2$I USING BTREE(hab_type)',
-					   output_schema, output_table_max);
-		EXECUTE format('CREATE INDEX idx_%2$I_eunis_l3 ON %1$I.%2$I USING BTREE(eunis_l3)',
-					   output_schema, output_table_max);
-		EXECUTE format('CREATE INDEX idx_%2$I_sensitivity_ab_su_num ON %1$I.%2$I USING BTREE(sensitivity_ab_su_num)',
-					   output_schema, output_table_max);
-		EXECUTE format('CREATE INDEX idx_%2$I_sensitivity_ab_ss_num ON %1$I.%2$I USING BTREE(sensitivity_ab_ss_num)',
-					   output_schema, output_table_max);
+		/* index species sensitivity maximum table */
+		CALL bh3_index(output_schema, output_table_max, 
+					   ARRAY[
+						   ARRAY['the_geom','s'] 
+						   ,ARRAY['gid','u']
+						   ,ARRAY['hab_type','']
+						   ,ARRAY['eunis_l3','']
+						   ,ARRAY['sensitivity_ab_su_num','']
+						   ,ARRAY['sensitivity_ab_ss_num','']
+					   ]);
 
 		RAISE INFO 'bh3_sensitivity_layer_prep: Indexed output table %.%: %', 
 			output_schema, output_table_max, (clock_timestamp() - start_time);
@@ -301,19 +296,16 @@ BEGIN
 
 		start_time := clock_timestamp();
 
-		/* create indexes on species sensitivity mode table */
-		EXECUTE format('CREATE INDEX sidx_%2$I_the_geom ON %1$I.%2$I USING GIST(the_geom)',
-					   output_schema, output_table_mode);
-		EXECUTE format('CREATE UNIQUE INDEX idx_%2$I_gid ON %1$I.%2$I USING BTREE(gid)',
-					   output_schema, output_table_mode);
-		EXECUTE format('CREATE INDEX idx_%2$I_hab_type ON %1$I.%2$I USING BTREE(hab_type)',
-					   output_schema, output_table_mode);
-		EXECUTE format('CREATE INDEX idx_%2$I_eunis_l3 ON %1$I.%2$I USING BTREE(eunis_l3)',
-					   output_schema, output_table_mode);
-		EXECUTE format('CREATE INDEX idx_%2$I_sensitivity_ab_su_num ON %1$I.%2$I USING BTREE(sensitivity_ab_su_num)',
-					   output_schema, output_table_mode);
-		EXECUTE format('CREATE INDEX idx_%2$I_sensitivity_ab_ss_num ON %1$I.%2$I USING BTREE(sensitivity_ab_ss_num)',
-					   output_schema, output_table_mode);
+		/* index species sensitivity mode table */
+		CALL bh3_index(output_schema, output_table_mode, 
+					   ARRAY[
+						   ARRAY['the_geom','s']
+						   ,ARRAY['gid','u']
+						   ,ARRAY['hab_type','']
+						   ,ARRAY['eunis_l3','']
+						   ,ARRAY['sensitivity_ab_su_num','']
+						   ,ARRAY['sensitivity_ab_ss_num','']
+					   ]);
 
 		RAISE INFO 'bh3_sensitivity_layer_prep: Indexed output table %.%: %', 
 			output_schema, output_table_mode, (clock_timestamp() - start_time);

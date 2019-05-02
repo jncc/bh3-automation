@@ -42,15 +42,10 @@ BEGIN
 		CALL bh3_drop_temp_table(habitat_sensitivity_final_table);
 
 		/* clean up any previous output left behind */
-		FOR tn IN 
-			EXECUTE format('SELECT c.relname '
-						   'FROM pg_class c '
-							   'JOIN pg_namespace n ON c.relnamespace = n.oid '
-						   'WHERE n.nspname = $1 AND c.relname IN($2)')
-			USING output_schema, output_table
-		LOOP
-			EXECUTE 'SELECT DropGeometryTable($1::text,$2::text)' USING output_schema, tn;
-		END LOOP;
+		CALL bh3_drop_spatial_tables(
+			ARRAY[
+				ARRAY[output_schema, output_table]::name[]
+			]::name[][]);
 
 		RAISE INFO 'bh3_sensitivity_map: Creating temporary table %', species_sensitivity_mode_final_table;
 
@@ -146,10 +141,11 @@ BEGIN
 		
 		EXECUTE format('ALTER TABLE %1$I ADD CONSTRAINT %1$s_pkey PRIMARY KEY(gid)', 
 					   species_sensitivity_mode_final_table);
-		EXECUTE format('CREATE INDEX sidx_%1$s_the_geom ON %1$I USING GIST(the_geom)', 
-					   species_sensitivity_mode_final_table);
-		EXECUTE format('CREATE UNIQUE INDEX idx_%1$s_gid ON %1$I USING BTREE(gid)', 
-					   species_sensitivity_mode_final_table);
+		CALL bh3_index(NULL, species_sensitivity_mode_final_table, 
+					   ARRAY[
+						   ARRAY['the_geom','s']
+						   ,ARRAY['gid','u']
+					   ]);
 
 		RAISE INFO 'bh3_sensitivity_map: Creating temporary table %', species_sensitivity_all_areas_table;
 
@@ -201,10 +197,11 @@ BEGIN
 
 		EXECUTE format('ALTER TABLE %1$I ADD CONSTRAINT %1$s_pkey PRIMARY KEY(gid)', 
 					   species_sensitivity_all_areas_table);
-		EXECUTE format('CREATE INDEX sidx_%1$s_the_geom ON %1$I USING GIST(the_geom)', 
-					   species_sensitivity_all_areas_table);
-		EXECUTE format('CREATE UNIQUE INDEX idx_%1$s_gid ON %1$I USING BTREE(gid)', 
-					   species_sensitivity_all_areas_table);
+		CALL bh3_index(NULL, species_sensitivity_all_areas_table, 
+					   ARRAY[
+						   ARRAY['the_geom','s']
+						   ,ARRAY['gid','u']
+					   ]);
 
 		RAISE INFO 'bh3_sensitivity_map: Creating temporary table %', habitat_sensitivity_final_table;
 
@@ -290,10 +287,11 @@ BEGIN
 
 		EXECUTE format('ALTER TABLE %1$I ADD CONSTRAINT %1$s_pkey PRIMARY KEY(gid)', 
 					   habitat_sensitivity_final_table);
-		EXECUTE format('CREATE INDEX sidx_%1$s_the_geom ON %1$I USING GIST(the_geom)', 
-					   habitat_sensitivity_final_table);
-		EXECUTE format('CREATE UNIQUE INDEX idx_%1$s_gid ON %1$I USING BTREE(gid)', 
-					   habitat_sensitivity_final_table);
+		CALL bh3_index(NULL, habitat_sensitivity_final_table, 
+					   ARRAY[
+						   ARRAY['the_geom','s']
+						   ,ARRAY['gid','u']
+					   ]);
 
 		RAISE INFO 'bh3_sensitivity_map: Creating table %.%', output_schema, output_table;
 
@@ -356,10 +354,11 @@ BEGIN
 					   habitat_sensitivity_final_table, species_sensitivity_all_areas_table, 
 					   output_schema, output_table);
 
-		EXECUTE format('CREATE INDEX sidx_%2$s_the_geom ON %1$I.%2$I USING GIST(the_geom)', 
-					   output_schema, output_table);
-		EXECUTE format('CREATE UNIQUE INDEX idx_%2$s_gid ON %1$I.%2$I USING BTREE(gid)', 
-					   output_schema, output_table);
+		CALL bh3_index(output_schema, output_table, 
+					   ARRAY[
+						   ARRAY['the_geom','s']
+						   ,ARRAY['gid','u']
+					   ]);
 
 		/* drop temp tables */
 		RAISE INFO 'bh3_sensitivity_map: Dropping temporary table %', species_sensitivity_mode_final_table;
@@ -402,7 +401,6 @@ habitat_sensitivity_table			name		Name of habitat sensitivity table. Defaults to
 species_sensitivity_max_table		name		Table name of species sensitivity maximum map. Defaults to ''species_sensitivity_max''.
 species_sensitivity_mode_table		name		Table name of species sensitivity mode map. Defaults to ''species_sensitivity_mode''.
 output_table						name		Table name of output sensitivity map. Defaults to ''sensitivity_map''.
-				SRID of output tables (reprojecting greatly affects performance). Defaults to 4326.
 
 Returns:
 A single error record. If execution succeeds its success field will be true and the remaining fields will be empty.

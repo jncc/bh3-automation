@@ -207,8 +207,10 @@ BEGIN
 		start_time := clock_timestamp();
 
 		/* create spatial index on temp_table_habitat_unique_overlaps */
-		EXECUTE format('CREATE INDEX sidx_%1$s_the_geom ON %1$I USING GIST(the_geom)', 
-					   temp_table_habitat_unique_overlaps);
+		CALL bh3_index(NULL, temp_table_habitat_unique_overlaps, 
+					   ARRAY[
+						   ARRAY['the_geom','s']
+					   ]);
 
 		RAISE INFO 'bh3_habitat_remove_overlaps: Created spatial index on temporary table %: %', 
 			temp_table_habitat_unique_overlaps, (clock_timestamp() - start_time);
@@ -278,8 +280,10 @@ BEGIN
 		start_time := clock_timestamp();
 
 		/* create spatial index on temp_table_habitat_overlaps_removed */
-		EXECUTE format('CREATE INDEX sidx_%1$s_the_geom ON %1$I USING GIST(the_geom)',
-					   temp_table_habitat_overlaps_removed);
+		CALL bh3_index(NULL, temp_table_habitat_overlaps_removed, 
+					   ARRAY[
+						   ARRAY['the_geom','s']
+					   ]);
 
 		RAISE INFO 'bh3_habitat_remove_overlaps: Created spatial index on temporary table %: %', 
 			temp_table_habitat_overlaps_removed, (clock_timestamp() - start_time);

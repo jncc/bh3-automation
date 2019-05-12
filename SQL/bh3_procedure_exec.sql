@@ -1,5 +1,5 @@
 CALL public.bh3_procedure(
-	0::integer									--boundary_filter integer
+	ARRAY[0]::integer[]							--boundary_filter integer
 	,NULL::character varying[]					--habitat_types_filter character varying[]
 	,'2012-01-01'::timestamp					--date_start timestamp without time zone
 	,'rock_eco_groups'::sensitivity_source		--species_sensitivity_source_table sensitivity_source

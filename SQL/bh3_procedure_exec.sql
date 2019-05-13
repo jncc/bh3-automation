@@ -5,6 +5,7 @@ CALL public.bh3_procedure(
 	,'rock_eco_groups'::sensitivity_source		--species_sensitivity_source_table sensitivity_source
 	,'ices_abrasion'::name						--pressure_schema name
 	,'wales'::name								--output_schema name
+	,'bh3'::character varying					--output_owner character varying DEFAULT NULL::character varying,
 	,'static'::name								--boundary_schema name DEFAULT 'static'::name
 	,'official_country_waters_wgs84'::name		--boundary_table name DEFAULT 'official_country_waters_wgs84'::name
 	,'static'::name								--habitat_schema name DEFAULT 'static'::name

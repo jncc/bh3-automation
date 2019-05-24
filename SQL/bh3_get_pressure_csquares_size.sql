@@ -1,12 +1,11 @@
--- FUNCTION: public.bh3_get_pressure_csquares_size(name, timestamp without time zone, timestamp without time zone, name, name, integer)
+-- FUNCTION: public.bh3_get_pressure_csquares_size(name, integer, integer, name, name, integer)
 
--- DROP FUNCTION public.bh3_get_pressure_csquares_size(name, timestamp without time zone, timestamp without time zone, name, name, integer);
+-- DROP FUNCTION public.bh3_get_pressure_csquares_size(name, integer, integer, name, name, integer);
 
 CREATE OR REPLACE FUNCTION public.bh3_get_pressure_csquares_size(
 	pressure_schema name,
-	date_start timestamp without time zone,
-	date_end timestamp without time zone DEFAULT now(
-	),
+	start_year integer,
+	end_year integer DEFAULT (date_part('year'::text, now()))::integer,
 	sar_surface_column name DEFAULT 'sar_surface'::name,
 	sar_subsurface_column name DEFAULT 'sar_subsurface'::name,
 	output_srid integer DEFAULT 4326)
@@ -21,8 +20,6 @@ DECLARE
 	exc_detail text;
 	exc_hint text;
 	geom_fld character varying;
-	start_year integer;
-	end_year integer;
 	srid int;
 	geom_exp text;
 	rel_cursor refcursor;
@@ -36,9 +33,6 @@ BEGIN
 	BEGIN
 		geom_fld := 'the_geom';
 		sqlstmt := '';
-
-		start_year := extract(year from date_start)::integer;
-		end_year := extract(year from date_end)::integer;
 
 		OPEN rel_cursor FOR EXECUTE format(
 			'SELECT c.relname '
@@ -117,10 +111,10 @@ BEGIN
 END;
 $BODY$;
 
-ALTER FUNCTION public.bh3_get_pressure_csquares_size(name, timestamp without time zone, timestamp without time zone, name, name, integer)
+ALTER FUNCTION public.bh3_get_pressure_csquares_size(name, integer, integer, name, name, integer)
     OWNER TO postgres;
 
-COMMENT ON FUNCTION public.bh3_get_pressure_csquares_size(name, timestamp without time zone, timestamp without time zone, name, name, integer)
+COMMENT ON FUNCTION public.bh3_get_pressure_csquares_size(name, integer, integer, name, name, integer)
     IS 'Purpose:
 Obtains the size of c-squares from the geometries of the tables in the selected pressure schema.
 
@@ -132,8 +126,8 @@ than 0.00000001.
 
 Parameters:
 pressure_schema			name							Name of the schema that holds the pressure tables.
-date_start				timestamp without time zone		Earliest date for squares to be included.
-date_end				timestamp without time zone		Latest  date for squares to be included. Defaults to current date and time.
+start_year				integer							Earliest year for squares to be included.
+end_year				integer							Latest year for squares to be included. Defaults to current date and time.
 sar_surface_column		name							Name of the surface SAR column. Defaults to ''sar_surface''.
 sar_subsurface_column	name							Name of the sub-surface SAR column. Defaults to ''sar_subsurface''.
 output_srid				integer 						SRID of spatial reference system in which c-squares are to be measured. Defaults to 4326.

@@ -1,12 +1,12 @@
--- FUNCTION: public.bh3_species_sensitivity_clipped(name, sensitivity_source, timestamp without time zone, timestamp without time zone, name, character varying[], boolean, integer)
+-- FUNCTION: public.bh3_species_sensitivity_clipped(name, sensitivity_source, integer, integer, name, character varying[], boolean, integer)
 
--- DROP FUNCTION public.bh3_species_sensitivity_clipped(name, sensitivity_source, timestamp without time zone, timestamp without time zone, name, character varying[], boolean, integer);
+-- DROP FUNCTION public.bh3_species_sensitivity_clipped(name, sensitivity_source, integer, integer, name, character varying[], boolean, integer);
 
 CREATE OR REPLACE FUNCTION public.bh3_species_sensitivity_clipped(
 	boundary_schema name,
 	sensitivity_source_table sensitivity_source,
-	date_start timestamp without time zone,
-	date_end timestamp without time zone DEFAULT now(),
+	start_year integer,
+	end_year integer DEFAULT (date_part('year'::text, now()))::integer,
 	boundary_table name DEFAULT 'boundary'::name,
 	habitat_types_filter character varying[] DEFAULT NULL::character varying[],
 	habitat_types_filter_negate boolean DEFAULT false,
@@ -22,9 +22,14 @@ DECLARE
 	srid_smp int;
 	geom_exp_smp text;
 	eunis_corr_table_eunis_code_column name;
+	date_start timestamp without time zone;
+	date_end timestamp without time zone;
 
 BEGIN
 	eunis_corr_table_eunis_code_column := 'eunis_code_2007';
+
+	date_start := to_date(start_year::varchar, 'yyyy')::timestamp without time zone;
+	date_end := to_date(end_year::varchar, 'yyyy')::timestamp without time zone;
 
 	srid_smp := bh3_find_srid(boundary_schema, boundary_table, 'the_geom');
 	IF srid_smp != output_srid AND srid_smp > 0 AND output_srid > 0 THEN
@@ -175,10 +180,10 @@ BEGIN
 END;
 $BODY$;
 
-ALTER FUNCTION public.bh3_species_sensitivity_clipped(name, sensitivity_source, timestamp without time zone, timestamp without time zone, name, character varying[], boolean, integer)
+ALTER FUNCTION public.bh3_species_sensitivity_clipped(name, sensitivity_source, integer, integer, name, character varying[], boolean, integer)
     OWNER TO postgres;
 
-COMMENT ON FUNCTION public.bh3_species_sensitivity_clipped(name, sensitivity_source, timestamp without time zone, timestamp without time zone, name, character varying[], boolean, integer)
+COMMENT ON FUNCTION public.bh3_species_sensitivity_clipped(name, sensitivity_source, integer, integer, name, character varying[], boolean, integer)
     IS 'Purpose:
 Creates a table of species sensitivity rows within the specified boundary polygon(s).
 
@@ -190,8 +195,8 @@ the specified boundary polygon(s).
 Parameters:
 boundary_schema					name							Schema of table containing single AOI boundary polygon and bounding box.
 sensitivity_source_table		sensitivity_source				Source table for habitat sensitivity scores (enum value one of { ''broadscale_habitats'', ''eco_groups'', ''rock'', ''rock_eco_groups'' }).
-date_start						timestamp without time zone		Earliest date for Marine Recorder spcies samples to be included.
-date_end						timestamp without time zone		Latest date for Marine Recorder species samples and pressure data to be included. Defaults to current date and time.
+start_year						integer							Earliest year for Marine Recorder spcies samples to be included.
+end_year						integer							Latest year for Marine Recorder species samples and pressure data to be included. Defaults to current date and time.
 boundary_table					name							Name of table containing single AOI boundary polygon and bounding box. Defaults to ''boundary''.
 habitat_types_filter			character varying[]				Array of eunis_l3 codes of habitats in habitat_table to be included (or excluded if habitat_types_filter_negate is true).
 habitat_types_filter_negate		boolean							If true condition built with habitat_types_filter is to be negated, i.e. EUNIS L3 codes in habitat_types_filter will be excluded. Defaults to false.

@@ -1,14 +1,18 @@
--- FUNCTION: public.bh3_disturbance_map(name, name, name, name, timestamp without time zone, timestamp without time zone, name, name, name, name, name, name, integer)
+-- FUNCTION: public.bh3_disturbance_map(name, name, name, name, integer, integer, name, name, name, name, name, name, integer)
 
--- DROP FUNCTION public.bh3_disturbance_map(name, name, name, name, timestamp without time zone, timestamp without time zone, name, name, name, name, name, name, integer);
+-- DROP FUNCTION public.bh3_disturbance_map(name, name, name, name, integer, integer, name, name, name, name, name, name, integer);
 
 CREATE OR REPLACE FUNCTION public.bh3_disturbance_map(
 	boundary_schema name,
 	pressure_schema name,
 	sensitivity_map_schema name,
 	output_schema name,
-	date_start timestamp without time zone,
-	date_end timestamp without time zone DEFAULT now(),
+	start_year integer,
+	end_year integer DEFAULT (
+	date_part(
+	'year'::text,
+	now(
+	)))::integer,
 	boundary_table name DEFAULT 'boundary'::name,
 	sensitivity_map_table name DEFAULT 'sensitivity_map'::name,
 	pressure_map_table name DEFAULT 'pressure_map'::name,
@@ -140,7 +144,7 @@ BEGIN
 							',sar_subsurface_cat_comb '
 						'FROM bh3_get_pressure_csquares($1,$2,$3,$4,$5,$6,$7,$8)', 
 						output_schema, pressure_map_table)
-				USING boundary_schema, pressure_schema, date_start, date_end, boundary_table, 
+				USING boundary_schema, pressure_schema, start_year, end_year, boundary_table, 
 					sar_surface_column, sar_subsurface_column, output_srid;
 		
 		/* index pressure grid table */
@@ -345,10 +349,10 @@ BEGIN
 END;
 $BODY$;
 
-ALTER FUNCTION public.bh3_disturbance_map(name, name, name, name, timestamp without time zone, timestamp without time zone, name, name, name, name, name, name, integer)
+ALTER FUNCTION public.bh3_disturbance_map(name, name, name, name, integer, integer, name, name, name, name, name, name, integer)
     OWNER TO postgres;
 
-COMMENT ON FUNCTION public.bh3_disturbance_map(name, name, name, name, timestamp without time zone, timestamp without time zone, name, name, name, name, name, name, integer)
+COMMENT ON FUNCTION public.bh3_disturbance_map(name, name, name, name, integer, integer, name, name, name, name, name, name, integer)
     IS 'Purpose:
 Creates the disturbance map from sensitivity and pressure maps.
 
@@ -364,8 +368,8 @@ boundary_schema			name							Schema of table containing single AOI boundary poly
 pressure_schema			name							Schema in which pressure source tables are located (all tables in this schema that have the required columns will be used).
 sensitivity_map_schema	name							Schema in which sensitivity map table is located.
 output_schema			name							Schema in which output tables will be created (will be created if it does not already exist; tables in it will be overwritten).
-date_start				timestamp without time zone		Earliest date for Marine Recorder species samples to be included.
-date_end				timestamp without time zone		Latest date for Marine Recorder species samples and pressure data to be included. Defaults to current date and time.
+start_year				integer							Earliest year for Marine Recorder species samples to be included.
+end_year				integer							Latest year for Marine Recorder species samples and pressure data to be included. Defaults to current date and time.
 boundary_table			name							Name of table containing single AOI boundary polygon and bounding box. Defaults to ''boundary''.
 sensitivity_map_table	name							Table name of sensitivity map. Defaults to ''sensitivity_map''.
 pressure_map_table		name							Table name of pressure map, created in output_schema. Defaults to ''pressure_map''.

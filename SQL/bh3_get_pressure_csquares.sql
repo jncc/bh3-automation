@@ -1,39 +1,17 @@
--- FUNCTION: public.bh3_get_pressure_csquares(name, name, timestamp without time zone, timestamp without time zone, name, name, name, integer)
+-- FUNCTION: public.bh3_get_pressure_csquares(name, name, integer, integer, name, name, name, integer)
 
--- DROP FUNCTION public.bh3_get_pressure_csquares(name, name, timestamp without time zone, timestamp without time zone, name, name, name, integer);
+-- DROP FUNCTION public.bh3_get_pressure_csquares(name, name, integer, integer, name, name, name, integer);
 
 CREATE OR REPLACE FUNCTION public.bh3_get_pressure_csquares(
 	boundary_schema name,
 	pressure_schema name,
-	date_start timestamp without time zone,
-	date_end timestamp without time zone DEFAULT now(),
+	start_year integer,
+	end_year integer DEFAULT (date_part('year'::text, now()))::integer,
 	boundary_table name DEFAULT 'boundary'::name,
 	sar_surface_column name DEFAULT 'sar_surface'::name,
 	sar_subsurface_column name DEFAULT 'sar_subsurface'::name,
 	output_srid integer DEFAULT 4326)
-    RETURNS TABLE(
-		gid bigint,
-		c_square character varying,
-		n bigint,
-		sar_surface_min double precision,
-		sar_surface_max double precision,
-		sar_surface_avg double precision,
-		sar_surface_cat_min integer,
-		sar_surface_cat_max integer,
-		sar_surface_cat_range integer,
-		sar_surface_variable boolean,
-		sar_surface double precision,
-		sar_surface_cat_comb integer,
-		sar_subsurface_min double precision,
-		sar_subsurface_max double precision,
-		sar_subsurface_avg double precision,
-		sar_subsurface_cat_min integer,
-		sar_subsurface_cat_max integer,
-		sar_subsurface_cat_range integer,
-		sar_subsurface_variable boolean,
-		sar_subsurface double precision,
-		sar_subsurface_cat_comb integer,
-		the_geom geometry) 
+    RETURNS TABLE(gid bigint, c_square character varying, n bigint, sar_surface_min double precision, sar_surface_max double precision, sar_surface_avg double precision, sar_surface_cat_min integer, sar_surface_cat_max integer, sar_surface_cat_range integer, sar_surface_variable boolean, sar_surface double precision, sar_surface_cat_comb integer, sar_subsurface_min double precision, sar_subsurface_max double precision, sar_subsurface_avg double precision, sar_subsurface_cat_min integer, sar_subsurface_cat_max integer, sar_subsurface_cat_range integer, sar_subsurface_variable boolean, sar_subsurface double precision, sar_subsurface_cat_comb integer, the_geom geometry) 
     LANGUAGE 'plpgsql'
 
     COST 100
@@ -44,8 +22,6 @@ DECLARE
 	exc_text text;
 	exc_detail text;
 	exc_hint text;
-	start_year integer;
-	end_year integer;
 	negation character varying;
 	srid int;
 	geom_fld name;
@@ -58,9 +34,6 @@ BEGIN
 	BEGIN
 		geom_fld := 'the_geom'::name;
 		sqlstmt := '';
-
-		start_year := extract(year from date_start)::integer;
-		end_year := extract(year from date_end)::integer;
 
 		OPEN rel_cursor FOR EXECUTE format(
 			'SELECT c.relname '
@@ -206,10 +179,10 @@ BEGIN
 END;
 $BODY$;
 
-ALTER FUNCTION public.bh3_get_pressure_csquares(name, name, timestamp without time zone, timestamp without time zone, name, name, name, integer)
+ALTER FUNCTION public.bh3_get_pressure_csquares(name, name, integer, integer, name, name, name, integer)
     OWNER TO postgres;
 
-COMMENT ON FUNCTION public.bh3_get_pressure_csquares(name, name, timestamp without time zone, timestamp without time zone, name, name, name, integer)
+COMMENT ON FUNCTION public.bh3_get_pressure_csquares(name, name, integer, integer, name, name, name, integer)
     IS 'Purpose:
 Creates an in-memory table of categorised pressure c-squares from the tables in the specified pressure_schema. 
 All tables in pressure_schema that have the required columns will be included.
@@ -223,8 +196,8 @@ of the resulting row sets.
 Paramerters:
 boundary_schema			name							Schema of table containing single AOI boundary polygon and bounding box.
 pressure_schema			name							Schema in which pressure source tables are located (all tables in this schema that have the required columns will be used).
-date_start				timestamp without time zone		Earliest date for Marine Recorder spcies samples to be included.
-date_end				timestamp without time zone		Latest date for Marine Recorder species samples and pressure data to be included. Defaults to current date and time. Defaults to current date and time.
+start_year				integer							Earliest year for Marine Recorder spcies samples to be included.
+date_end				integer							Latest year for Marine Recorder species samples and pressure data to be included. Defaults to current date and time. Defaults to current date and time.
 boundary_table			name							Name of table containing single AOI boundary polygon and bounding box. Defaults to ''boundary''.
 sar_surface_column		name							SAR surface column name in pressure source tables. Defaults to ''sar_surface''.
 sar_subsurface_column	name							SAR sub-surface column name in pressure source tables. Defaults to ''sar_subsurface''.

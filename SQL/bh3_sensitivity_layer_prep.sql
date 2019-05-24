@@ -1,14 +1,14 @@
--- FUNCTION: public.bh3_sensitivity_layer_prep(name, name, name, sensitivity_source, timestamp without time zone, timestamp without time zone, name, character varying[], boolean, name, name, name, name, integer)
+-- FUNCTION: public.bh3_sensitivity_layer_prep(name, name, name, sensitivity_source, integer, integer, name, character varying[], boolean, name, name, name, name, integer)
 
--- DROP FUNCTION public.bh3_sensitivity_layer_prep(name, name, name, sensitivity_source, timestamp without time zone, timestamp without time zone, name, character varying[], boolean, name, name, name, name, integer);
+-- DROP FUNCTION public.bh3_sensitivity_layer_prep(name, name, name, sensitivity_source, integer, integer, name, character varying[], boolean, name, name, name, name, integer);
 
 CREATE OR REPLACE FUNCTION public.bh3_sensitivity_layer_prep(
 	boundary_schema name,
 	habitat_schema name,
 	output_schema name,
 	sensitivity_source_table sensitivity_source,
-	date_start timestamp without time zone,
-	date_end timestamp without time zone DEFAULT now(),
+	start_year integer,
+	end_year integer DEFAULT (date_part('year'::text, now()))::integer,
 	boundary_table name DEFAULT 'official_country_waters_wgs84'::name,
 	habitat_types_filter character varying[] DEFAULT NULL::character varying[],
 	habitat_types_filter_negate boolean DEFAULT false,
@@ -79,7 +79,7 @@ BEGIN
 						   ',sensitivity_ab_ss_num '
 					   'FROM bh3_species_sensitivity_clipped($1,$2,$3,$4,$5,$6,$7,$8)',
 					   species_clip_table)
-		USING boundary_schema, sensitivity_source_table, date_start, date_end, 
+		USING boundary_schema, sensitivity_source_table, start_year, end_year, 
 			boundary_table, habitat_types_filter, habitat_types_filter_negate, output_srid;
 
 		GET DIAGNOSTICS rows_affected = ROW_COUNT;
@@ -325,10 +325,10 @@ BEGIN
 END;
 $BODY$;
 
-ALTER FUNCTION public.bh3_sensitivity_layer_prep(name, name, name, sensitivity_source, timestamp without time zone, timestamp without time zone, name, character varying[], boolean, name, name, name, name, integer)
+ALTER FUNCTION public.bh3_sensitivity_layer_prep(name, name, name, sensitivity_source, integer, integer, name, character varying[], boolean, name, name, name, name, integer)
     OWNER TO postgres;
 
-COMMENT ON FUNCTION public.bh3_sensitivity_layer_prep(name, name, name, sensitivity_source, timestamp without time zone, timestamp without time zone, name, character varying[], boolean, name, name, name, name, integer)
+COMMENT ON FUNCTION public.bh3_sensitivity_layer_prep(name, name, name, sensitivity_source, integer, integer, name, character varying[], boolean, name, name, name, name, integer)
     IS 'Purpose:
 Creates the sensitivity maximum and mode tables from the habitat table and Marine Recorder species sensitivity rows for the specified time period 
 and habitats within the specified boundary polygon(s).
@@ -348,8 +348,8 @@ boundary_schema				name							Schema of table containing single AOI boundary pol
 habitat_schema				name							Schema of input habitat_table.
 output_schema				name							Schema in which output tables will be created (will be created if it does not already exist; tables in it will be overwritten).
 sensitivity_source_table	sensitivity_source				Source table for habitat sensitivity scores (enum value one of { ''broadscale_habitats'', ''eco_groups'', ''rock'', ''rock_eco_groups'' }).
-date_start					timestamp without time zone		Earliest date for Marine Recorder spcies samples to be included.
-date_end					timestamp without time zone		Latest date for Marine Recorder species samples and pressure data to be included. Defaults to current date and time.
+start_year					integer							Earliest year for Marine Recorder spcies samples to be included.
+end_year					integer							Latest year for Marine Recorder species samples and pressure data to be included. Defaults to current date and time.
 boundary_table				name							Name of table containing single AOI boundary polygon and bounding boxs. Defaults to ''boundary''.
 habitat_types_filter		character varying[]				Array of eunis_l3 codes of habitats in habitat_table to be included (or excluded if habitat_types_filter_negate is true).
 habitat_types_filter_negate	boolean							If true condition built with habitat_types_filter is to be negated, i.e. EUNIS L3 codes in habitat_types_filter will be excluded. Defaults to false.

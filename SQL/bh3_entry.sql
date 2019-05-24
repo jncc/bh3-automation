@@ -1,11 +1,11 @@
--- FUNCTION: public.bh3_entry(integer[], character varying[], timestamp without time zone, sensitivity_source, name, name, character varying, name, name, name, name, name, name, name, name, name, name, name, name, name, name, name, timestamp without time zone, boolean, boolean, boolean, integer)
+-- FUNCTION: public.bh3_entry(integer[], character varying[], integer, sensitivity_source, name, name, character varying, name, name, name, name, name, name, name, name, name, name, name, name, name, name, name, integer, boolean, boolean, boolean, integer)
 
--- DROP FUNCTION public.bh3_entry(integer[], character varying[], timestamp without time zone, sensitivity_source, name, name, character varying, name, name, name, name, name, name, name, name, name, name, name, name, name, name, name, timestamp without time zone, boolean, boolean, boolean, integer);
+-- DROP FUNCTION public.bh3_entry(integer[], character varying[], integer, sensitivity_source, name, name, character varying, name, name, name, name, name, name, name, name, name, name, name, name, name, name, name, integer, boolean, boolean, boolean, integer);
 
 CREATE OR REPLACE FUNCTION public.bh3_entry(
 	boundary_filter integer[],
 	habitat_types_filter character varying[],
-	date_start timestamp without time zone,
+	start_year integer,
 	species_sensitivity_source_table sensitivity_source,
 	pressure_schema name,
 	output_schema name,
@@ -25,8 +25,11 @@ CREATE OR REPLACE FUNCTION public.bh3_entry(
 	disturbance_map_table name DEFAULT 'disturbance_map'::name,
 	sar_surface_column name DEFAULT 'sar_surface'::name,
 	sar_subsurface_column name DEFAULT 'sar_subsurface'::name,
-	date_end timestamp without time zone DEFAULT now(
-	),
+	end_year integer DEFAULT (
+	date_part(
+	'year'::text,
+	now(
+	)))::integer,
 	boundary_filter_negate boolean DEFAULT false,
 	habitat_types_filter_negate boolean DEFAULT false,
 	remove_overlaps boolean DEFAULT false,
@@ -86,8 +89,8 @@ BEGIN
 		SELECT * 
 		FROM bh3_get_pressure_csquares_size(
 			pressure_schema
-			,date_start
-			,date_end
+			,start_year
+			,end_year
 			,sar_surface_column
 			,sar_subsurface_column
 			,output_srid
@@ -200,8 +203,8 @@ BEGIN
 			,output_schema
 			,output_schema
 			,species_sensitivity_source_table
-			,date_start
-			,date_end
+			,start_year
+			,end_year
 			,boundary_subdivide_union_table
 			,habitat_types_filter
 			,habitat_types_filter_negate
@@ -268,8 +271,8 @@ BEGIN
 				,pressure_schema
 				,output_schema
 				,output_schema
-				,date_start
-				,date_end
+				,start_year
+				,end_year
 				,boundary_subdivide_union_table
 				,sensitivity_map_table
 				,pressure_map_table
@@ -317,10 +320,10 @@ BEGIN
 END;
 $BODY$;
 
-ALTER FUNCTION public.bh3_entry(integer[], character varying[], timestamp without time zone, sensitivity_source, name, name, character varying, name, name, name, name, name, name, name, name, name, name, name, name, name, name, name, timestamp without time zone, boolean, boolean, boolean, integer)
+ALTER FUNCTION public.bh3_entry(integer[], character varying[], integer, sensitivity_source, name, name, character varying, name, name, name, name, name, name, name, name, name, name, name, name, name, name, name, integer, boolean, boolean, boolean, integer)
     OWNER TO postgres;
 
-COMMENT ON FUNCTION public.bh3_entry(integer[], character varying[], timestamp without time zone, sensitivity_source, name, name, character varying, name, name, name, name, name, name, name, name, name, name, name, name, name, name, name, timestamp without time zone, boolean, boolean, boolean, integer)
+COMMENT ON FUNCTION public.bh3_entry(integer[], character varying[], integer, sensitivity_source, name, name, character varying, name, name, name, name, name, name, name, name, name, name, name, name, name, name, name, integer, boolean, boolean, boolean, integer)
     IS 'Purpose:
 Main entry point that starts a BH3 run. 
 This is called by the QGIS user interface and may be executed directly in pgAdmin or on the PostgreSQL command line.
@@ -333,7 +336,7 @@ bh3_sensitivity_map and bh3_disturbance_map functions, inserting any error rows 
 Parameters:
 boundary_filter						integer[]						Array of primary key values (gid) of AOI polygons in boundary_table to be included (or excluded if boundary_filter_negate is true).
 habitat_types_filter				character varying[]				Array of eunis_l3 codes of habitats in habitat_table to be included (or excluded if habitat_types_filter_negate is true).
-date_start							timestamp without time zone		Earliest date for Marine Recorder spcies samples to be included.
+start_year							integer							Earliest year for Marine Recorder spcies samples to be included.
 species_sensitivity_source_table	sensitivity_source				Source table for habitat sensitivity scores (enum value one of { ''broadscale_habitats'', ''eco_groups'', ''rock'', ''rock_eco_groups'' }).
 pressure_schema						name							Schema in which pressure source tables are located (all tables in this schema that have the required columns will be used).
 output_schema						name							Schema in which output tables will be created (will be created if it does not already exist; tables in it will be overwritten).
@@ -353,7 +356,7 @@ pressure_map_table					name							Table name of pressure map, created in output_
 disturbance_map_table				name							Table name of output disturbance map. Defaults to ''disturbance_map''.
 sar_surface_column					name							SAR surface column name in pressure source tables. Defaults to ''sar_surface''.
 sar_subsurface_column				name							SAR sub-surface column name in pressure source tables. Defaults to ''sar_subsurface''.
-date_end							timestamp without time zone		Latest date for Marine Recorder species samples and pressure data to be included. Defaults to current date and time.
+end_year							integer							Latest year for Marine Recorder species samples and pressure data to be included. Defaults to current date and time.
 boundary_filter_negate				boolean							If true condition built with boundary_filter is to be negated, i.e. AOI is all but the polygon identified by boundary_filter. Defaults to false.
 habitat_types_filter_negate			boolean							If true condition built with habitat_types_filter is to be negated, i.e. EUNIS L3 codes in habitat_types_filter will be excluded. Defaults to false.
 remove_overlaps						boolean							If true overlaps will be removed from habitat_sensitivity_table (significantly increases processing time). Defaults to false.

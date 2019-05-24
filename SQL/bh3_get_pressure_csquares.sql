@@ -6,8 +6,7 @@ CREATE OR REPLACE FUNCTION public.bh3_get_pressure_csquares(
 	boundary_schema name,
 	pressure_schema name,
 	date_start timestamp without time zone,
-	date_end timestamp without time zone DEFAULT now(
-	),
+	date_end timestamp without time zone DEFAULT now(),
 	boundary_table name DEFAULT 'boundary'::name,
 	sar_surface_column name DEFAULT 'sar_surface'::name,
 	sar_subsurface_column name DEFAULT 'sar_subsurface'::name,
@@ -46,7 +45,7 @@ BEGIN
 			'FROM pg_class c '
 				'JOIN pg_namespace n ON c.relnamespace = n.oid '
 				'JOIN pg_attribute a ON c.oid = a.attrelid '
-			'WHERE c.relkind = ''r'' '
+			'WHERE c.relkind = ''r'' OR c.relkind = ''v'' '
 				'AND a.attname IN ($1,$2,$3,$4,$5) '
 				'AND n.nspname = $6 '
 			'GROUP BY c.relname '

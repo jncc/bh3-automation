@@ -15,42 +15,61 @@ BEGIN
 	CASE source_table
 		WHEN 'broadscale_habitats' THEN
 			RETURN QUERY 
-			SELECT t.eunis_l3_code
+			SELECT eunis_l3_code
 				,NULL::text AS eunis_l3_name
 				,NULL::character varying AS characterising_species
-				,t.sensitivity_ab_su_num_max AS sensitivity_ab_su_num
-				,t.sensitivity_ab_ss_num_max AS sensitivity_ab_ss_num
-				,t.confidence_ab_su_num
-				,t.confidence_ab_ss_num
-			FROM lut.sensitivity_broadscale_habitats t;
+				,sensitivity_ab_su_num_max AS sensitivity_ab_su_num
+				,sensitivity_ab_ss_num_max AS sensitivity_ab_ss_num
+				,confidence_ab_su_num
+				,confidence_ab_ss_num
+			FROM lut.sensitivity_broadscale_habitats;
 		WHEN 'eco_groups' THEN 
 			RETURN QUERY 
 			SELECT NULL::character varying AS eunis_l3_code
 				,NULL::text AS eunis_l3_name
-				,t.characterising_species
-				,t.sensitivity_ab_su_num
-				,t.sensitivity_ab_ss_num
-				,t.confidence_ab_su_num
-				,t.confidence_ab_ss_num
-			FROM lut.sensitivity_eco_groups t;
+				,characterising_species
+				,sensitivity_ab_su_num
+				,sensitivity_ab_ss_num
+				,confidence_ab_su_num
+				,confidence_ab_ss_num
+			FROM lut.sensitivity_eco_groups;
+		WHEN 'eco_groups_rock' THEN
+			RETURN QUERY
+			SELECT NULL::character varying AS eunis_l3_code
+				,NULL::text AS eunis_l3_name
+				,characterising_species
+				,sensitivity_ab_su_num
+				,sensitivity_ab_ss_num
+				,confidence_ab_su_num
+				,confidence_ab_ss_num
+			FROM lut.sensitivity_eco_groups_rock;
 		WHEN 'rock' THEN
 			RETURN QUERY 
 			SELECT NULL::character varying AS eunis_l3_code
 				,NULL::text AS eunis_l3_name
-				,t.species_name AS characterising_species
-				,t.sensitivity_ab_su_num
+				,species_name AS characterising_species
+				,sensitivity_ab_su_num
 				,NULL::smallint AS sensitivity_ab_ss_num
-				,t.confidence_ab_su_num
+				,confidence_ab_ss_num
 				,NULL::smallint AS confidence_ab_ss_num
-			FROM lut.sensitivity_rock t;
+			FROM lut.sensitivity_rock;
 		WHEN 'rock_eco_groups' THEN
 			RETURN QUERY 
 			SELECT NULL::character varying AS eunis_l3_code
 				,NULL::text AS eunis_l3_name
 				,coalesce(r.species_name,e.characterising_species) AS characterising_species
-				,coalesce(r.sensitivity_ab_su_num,e.sensitivity_ab_su_num) AS sensitivity_ab_su_num
+				,CASE 
+					WHEN r.sensitivity_ab_su_num IS NOT NULL AND e.sensitivity_ab_su_num IS NOT NULL THEN 
+						CASE
+							WHEN r.confidence_ab_su_num > e.confidence_ab_su_num THEN r.sensitivity_ab_su_num 
+							WHEN r.confidence_ab_su_num < e.confidence_ab_su_num THEN e.sensitivity_ab_su_num
+							ELSE greatest(r.sensitivity_ab_su_num,e.sensitivity_ab_su_num)
+						END
+					ELSE
+						coalesce(r.sensitivity_ab_su_num,e.sensitivity_ab_su_num) 
+				END AS sensitivity_ab_su_num
 				,e.sensitivity_ab_ss_num
-				,coalesce(r.confidence_ab_su_num,e.confidence_ab_su_num) AS confidence_ab_su_num
+				,greatest(r.confidence_ab_su_num,e.confidence_ab_su_num) AS confidence_ab_su_num
 				,e.confidence_ab_ss_num
 			FROM lut.sensitivity_rock r
 				FULL JOIN lut.sensitivity_eco_groups e ON r.species_name = e.characterising_species;

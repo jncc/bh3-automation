@@ -11,7 +11,7 @@ CREATE OR REPLACE FUNCTION public.bh3_entry(
 	output_schema name,
 	output_owner character varying DEFAULT NULL::character varying,
 	boundary_schema name DEFAULT 'static'::name,
-	boundary_table name DEFAULT 'official_country_waters_wgs84'::name,
+	boundary_table name DEFAULT 'unofficial_country_waters_simplified_wgs84'::name,
 	habitat_schema name DEFAULT 'static'::name,
 	habitat_table name DEFAULT 'uk_habitat_map_wgs84'::name,
 	habitat_sensitivity_lookup_schema name DEFAULT 'lut'::name,

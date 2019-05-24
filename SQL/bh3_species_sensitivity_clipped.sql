@@ -11,24 +11,7 @@ CREATE OR REPLACE FUNCTION public.bh3_species_sensitivity_clipped(
 	habitat_types_filter character varying[] DEFAULT NULL::character varying[],
 	habitat_types_filter_negate boolean DEFAULT false,
 	output_srid integer DEFAULT 4326)
-    RETURNS TABLE(
-		gid bigint,
-		the_geom geometry,
-		survey_key character varying,
-		survey_event_key character varying,
-		sample_reference character varying,
-		sample_date timestamp with time zone,
-		biotope_code character varying,
-		biotope_desc text,
-		qualifier character varying,
-		eunis_code_2007 character varying,
-		eunis_name_2007 character varying,
-		annex_i_habitat character varying,
-		characterising_species character varying,
-		sensitivity_ab_su_num smallint,
-		confidence_ab_su_num smallint,
-		sensitivity_ab_ss_num smallint,
-		confidence_ab_ss_num smallint) 
+    RETURNS TABLE(gid bigint, the_geom geometry, survey_key character varying, survey_event_key character varying, sample_reference character varying, sample_date timestamp with time zone, biotope_code character varying, biotope_desc text, qualifier character varying, eunis_code_2007 character varying, eunis_name_2007 character varying, annex_i_habitat character varying, characterising_species character varying, sensitivity_ab_su_num smallint, confidence_ab_su_num smallint, sensitivity_ab_ss_num smallint, confidence_ab_ss_num smallint) 
     LANGUAGE 'plpgsql'
 
     COST 100
@@ -50,7 +33,7 @@ BEGIN
 		geom_exp_smp := format('smp.%I', 'the_geom');
 	END IF;
 
-	IF habitat_types_filter IS NULL AND array_length(habitat_types_filter, 1) > 0 THEN
+	IF habitat_types_filter IS NULL OR array_length(habitat_types_filter, 1) = 0 THEN
 		RETURN QUERY EXECUTE format('SELECT ROW_NUMBER() OVER() AS gid'
 										',%1$s'
 										',srv.survey_key'

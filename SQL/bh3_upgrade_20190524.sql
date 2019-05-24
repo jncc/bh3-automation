@@ -1,7 +1,3 @@
--- FUNCTION: public.bh3_get_pressure_csquares(name, name, timestamp without time zone, timestamp without time zone, name, name, name, integer)
-
--- DROP FUNCTION public.bh3_get_pressure_csquares(name, name, timestamp without time zone, timestamp without time zone, name, name, name, integer);
-
 CREATE OR REPLACE FUNCTION public.bh3_get_pressure_csquares(
 	boundary_schema name,
 	pressure_schema name,
@@ -205,33 +201,3 @@ BEGIN
 	END;
 END;
 $BODY$;
-
-ALTER FUNCTION public.bh3_get_pressure_csquares(name, name, timestamp without time zone, timestamp without time zone, name, name, name, integer)
-    OWNER TO postgres;
-
-COMMENT ON FUNCTION public.bh3_get_pressure_csquares(name, name, timestamp without time zone, timestamp without time zone, name, name, name, integer)
-    IS 'Purpose:
-Creates an in-memory table of categorised pressure c-squares from the tables in the specified pressure_schema. 
-All tables in pressure_schema that have the required columns will be included.
-
-Approach:
-Computes summary values of disturbance scores for each table in pressure_schema that has the columns 
-''c_square'', ''year'', sar_surface_column, sar_subsurface_column and ''the_geom'', aggregating by c_square,
-categorises the scores into sar_surface and sar_subsurface scores between one and four and returns the union
-of the resulting row sets.
-
-Paramerters:
-boundary_schema			name							Schema of table containing single AOI boundary polygon and bounding box.
-pressure_schema			name							Schema in which pressure source tables are located (all tables in this schema that have the required columns will be used).
-date_start				timestamp without time zone		Earliest date for Marine Recorder spcies samples to be included.
-date_end				timestamp without time zone		Latest date for Marine Recorder species samples and pressure data to be included. Defaults to current date and time. Defaults to current date and time.
-boundary_table			name							Name of table containing single AOI boundary polygon and bounding box. Defaults to ''boundary''.
-sar_surface_column		name							SAR surface column name in pressure source tables. Defaults to ''sar_surface''.
-sar_subsurface_column	name							SAR sub-surface column name in pressure source tables. Defaults to ''sar_subsurface''.
-output_srid				integer							SRID of output tables (reprojecting greatly affects performance). Defaults to 4326.
-
-Returns:
-An in-memory table of categorised pressure c-squares from the tables in the specified pressure_schema.
-
-Calls:
-bh3_find_srid';

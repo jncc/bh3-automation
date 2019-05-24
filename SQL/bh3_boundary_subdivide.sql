@@ -56,7 +56,7 @@ BEGIN
 			negation = '';
 		END IF;
 
-		IF boundary_filter IS NULL OR array_length(boundary_filter, 1) = 0 THEN
+		IF boundary_filter IS NULL OR array_length(boundary_filter, 1) = NULL THEN
 			EXECUTE format('CREATE TABLE %1$I.%2$I AS '
 						   'WITH cte_subdiv AS '
 						   '('

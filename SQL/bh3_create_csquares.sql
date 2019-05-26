@@ -4,7 +4,7 @@
 
 CREATE OR REPLACE FUNCTION public.bh3_create_csquares(
 	boundary_schema name,
-	boundary_table name DEFAULT 'official_country_waters_wgs84'::name,
+	boundary_table name DEFAULT 'boundary'::name,
 	boundary_clip boolean DEFAULT false,
 	cell_size_degrees numeric DEFAULT 0.05,
 	output_srid integer DEFAULT 4326)

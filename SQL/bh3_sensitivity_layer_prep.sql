@@ -9,7 +9,7 @@ CREATE OR REPLACE FUNCTION public.bh3_sensitivity_layer_prep(
 	sensitivity_source_table sensitivity_source,
 	start_year integer,
 	end_year integer DEFAULT (date_part('year'::text, now()))::integer,
-	boundary_table name DEFAULT 'official_country_waters_wgs84'::name,
+	boundary_table name DEFAULT 'boundary'::name,
 	habitat_types_filter character varying[] DEFAULT NULL::character varying[],
 	habitat_types_filter_negate boolean DEFAULT false,
 	habitat_table name DEFAULT 'habitat_sensitivity'::name,
@@ -347,7 +347,7 @@ Parameters:
 boundary_schema				name							Schema of table containing single AOI boundary polygon and bounding box.
 habitat_schema				name							Schema of input habitat_table.
 output_schema				name							Schema in which output tables will be created (will be created if it does not already exist; tables in it will be overwritten).
-sensitivity_source_table	sensitivity_source				Source table for habitat sensitivity scores (enum value one of { ''broadscale_habitats'', ''eco_groups'', ''rock'', ''rock_eco_groups'' }).
+sensitivity_source_table	sensitivity_source				Source table for habitat sensitivity scores (enum value one of { ''broadscale_habitats'', ''eco_groups'', ''rock'', ''rock_eco_groups'', ''eco_groups_rock'' }).
 start_year					integer							Earliest year for Marine Recorder spcies samples to be included.
 end_year					integer							Latest year for Marine Recorder species samples and pressure data to be included. Defaults to current date and time.
 boundary_table				name							Name of table containing single AOI boundary polygon and bounding boxs. Defaults to ''boundary''.

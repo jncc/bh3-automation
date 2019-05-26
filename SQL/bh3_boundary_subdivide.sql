@@ -8,7 +8,7 @@ CREATE OR REPLACE FUNCTION public.bh3_boundary_subdivide(
 	output_table name DEFAULT 'boundary'::name,
 	output_table_subdivide name DEFAULT 'boundary_subdivide'::name,
 	boundary_schema name DEFAULT 'static'::name,
-	boundary_table name DEFAULT 'official_country_waters_wgs84'::name,
+	boundary_table name DEFAULT 'unofficial_country_waters_simplified_wgs84'::name,
 	boundary_filter_negate boolean DEFAULT false,
 	output_srid integer DEFAULT 4326,
 	OUT success boolean,
@@ -56,19 +56,7 @@ BEGIN
 			negation = '';
 		END IF;
 
-		IF boundary_filter IS NULL OR array_length(boundary_filter, 1) = NULL THEN
-			EXECUTE format('CREATE TABLE %1$I.%2$I AS '
-						   'WITH cte_subdiv AS '
-						   '('
-							   'SELECT ST_Subdivide(%3$s) AS the_geom '
-							   'FROM %4$I.%5$I'
-						   ') '
-						   'SELECT ROW_NUMBER() OVER() AS gid'
-							   ',the_geom '
-						   'FROM cte_subdiv',
-						   output_schema, output_table_subdivide, 
-						   geom_exp_bnd, boundary_schema, boundary_table);
-		ELSIF array_length(boundary_filter, 1) = 1 THEN
+		IF array_length(boundary_filter, 1) = 1 THEN
 			EXECUTE format('CREATE TABLE %1$I.%2$I AS '
 						   'WITH cte_subdiv AS '
 						   '('
@@ -83,7 +71,7 @@ BEGIN
 						   geom_exp_bnd, boundary_schema, boundary_table, 
 						   negation)
 			USING boundary_filter[1];
-		ELSE
+		ELSIF array_length(boundary_filter, 1) > 1 THEN
 			EXECUTE format('CREATE TABLE %1$I.%2$I AS '
 						   'WITH cte_subdiv AS '
 						   '('
@@ -98,6 +86,18 @@ BEGIN
 						   geom_exp_bnd, boundary_schema, boundary_table, 
 						   negation)
 			USING boundary_filter;
+		ELSE
+			EXECUTE format('CREATE TABLE %1$I.%2$I AS '
+						   'WITH cte_subdiv AS '
+						   '('
+							   'SELECT ST_Subdivide(%3$s) AS the_geom '
+							   'FROM %4$I.%5$I'
+						   ') '
+						   'SELECT ROW_NUMBER() OVER() AS gid'
+							   ',the_geom '
+						   'FROM cte_subdiv',
+						   output_schema, output_table_subdivide, 
+						   geom_exp_bnd, boundary_schema, boundary_table);
 		END IF;
 
 		GET DIAGNOSTICS rows_affected = ROW_COUNT;
@@ -175,7 +175,7 @@ output_schema			name		Schema in which output tables are created.
 output_table			name		Name of table containing single, unioned AOI polygon and bounding box. Defaults to ''boundary''.
 output_table_subdivide	name		Name of table containing split AOI polygons. Defaults to ''boundary_subdivide''.
 boundary_schema			name		Schema of table containing AOI boundary polygons. Defaults to ''static''.
-boundary_table			name		Name of table containing AOI boundary polygons. Defaults to ''official_country_waters_wgs84''.
+boundary_table			name		Name of table containing AOI boundary polygons. Defaults to ''unofficial_country_waters_simplified_wgs84''.
 boundary_filter_negate	boolean		Defaults to false.
 output_srid				integer		SRID of output tables. Defaults to 4326.
 

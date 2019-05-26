@@ -7,7 +7,7 @@ CALL public.bh3_procedure(
 	,'wales'::name											--output_schema name
 	,'bh3'::character varying								--output_owner character varying DEFAULT NULL::character varying,
 	,'static'::name											--boundary_schema name DEFAULT 'static'::name
-	,'unofficial_country_waters_simplified_wgs84'::name		--boundary_table name DEFAULT 'official_country_waters_wgs84'::name
+	,'unofficial_country_waters_simplified_wgs84'::name		--boundary_table name DEFAULT 'unofficial_country_waters_simplified_wgs84'::name
 	,'static'::name											--habitat_schema name DEFAULT 'static'::name
 	,'uk_habitat_map_wgs84'::name							--habitat_table name DEFAULT 'uk_habitat_map_wgs84'::name
 	,'lut'::name											--habitat_sensitivity_lookup_schema name DEFAULT 'lut'::name

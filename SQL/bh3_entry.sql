@@ -25,11 +25,7 @@ CREATE OR REPLACE FUNCTION public.bh3_entry(
 	disturbance_map_table name DEFAULT 'disturbance_map'::name,
 	sar_surface_column name DEFAULT 'sar_surface'::name,
 	sar_subsurface_column name DEFAULT 'sar_subsurface'::name,
-	end_year integer DEFAULT (
-	date_part(
-	'year'::text,
-	now(
-	)))::integer,
+	end_year integer DEFAULT (date_part('year'::text, now()))::integer,
 	boundary_filter_negate boolean DEFAULT false,
 	habitat_types_filter_negate boolean DEFAULT false,
 	remove_overlaps boolean DEFAULT false,
@@ -342,7 +338,7 @@ pressure_schema						name							Schema in which pressure source tables are locat
 output_schema						name							Schema in which output tables will be created (will be created if it does not already exist; tables in it will be overwritten).
 output_owner						character varying				Role that will own output schema and tables. Defaults to NULL, which means the user running the procedure.
 boundary_schema						name							Schema of table containing AOI boundary polygons. Defaults to ''static''.
-boundary_table						name							Name of table containing AOI boundary polygons. Defaults to ''official_country_waters_wgs84''.
+boundary_table						name							Name of table containing AOI boundary polygons. Defaults to ''unofficial_country_waters_simplified_wgs84''.
 habitat_schema						name							Habitat table schema. Defaults to ''static''.
 habitat_table						name							Habitat table name. Defaults to ''uk_habitat_map_wgs84''.
 habitat_sensitivity_lookup_schema	name							Schema of habitat sensitivity lookup table. Defaults to ''lut''.

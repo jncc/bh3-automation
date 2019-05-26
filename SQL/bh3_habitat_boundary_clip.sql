@@ -69,19 +69,17 @@ BEGIN
 		END IF;
 
 		habitat_type_condition := '';
-		IF habitat_types_filter IS NOT NULL AND array_length(habitat_types_filter, 1) > 0 THEN
-			IF array_length(habitat_types_filter, 1) = 1 THEN
-				IF habitat_types_filter_negate THEN
-					habitat_type_condition := format('hab.%1$I != %2$L', 'eunis_l3', habitat_types_filter[1]);
-				ELSE
-					habitat_type_condition := format('hab.%1$I = %2$L', 'eunis_l3', habitat_types_filter[1]);
-				END IF;
+		IF array_length(habitat_types_filter, 1) = 1 THEN
+			IF habitat_types_filter_negate THEN
+				habitat_type_condition := format('hab.%1$I != %2$L', 'eunis_l3', habitat_types_filter[1]);
 			ELSE
-				IF habitat_types_filter_negate THEN
-					habitat_type_condition := format('NOT hab.%1$I = ANY ($1)', 'eunis_l3');
-				ELSE
-					habitat_type_condition := format('hab.%1$I = ANY ($1)', 'eunis_l3');
-				END IF;
+				habitat_type_condition := format('hab.%1$I = %2$L', 'eunis_l3', habitat_types_filter[1]);
+			END IF;
+		ELSIF array_length(habitat_types_filter, 1) > 1 THEN
+			IF habitat_types_filter_negate THEN
+				habitat_type_condition := format('NOT hab.%1$I = ANY ($1)', 'eunis_l3');
+			ELSE
+				habitat_type_condition := format('hab.%1$I = ANY ($1)', 'eunis_l3');
 			END IF;
 		ELSIF exclude_empty_mismatched_eunis_l3 THEN
 			habitat_type_condition := format('hab.%1$I IS NOT NULL', 'eunis_l3');
@@ -343,7 +341,7 @@ habitat_table						name					Name of the habitat table. Defaults to ''uk_habitat_
 sensitivity_schema					name					Schema of the habitat sensitvity lookup table. Defaults to ''lut''.
 sensitivity_table					name					Name of the habitat sensitvity lookup table. Defaults to ''sensitivity_broadscale_habitats''.
 boundary_subdivide_schema			name					Schema of the subdivided boundary table defining the AOI. Defaults to ''static''.
-boundary_subdivide_table			name					Name of the subdivided boundary table defining the AOI. Defaults to ''official_country_waters_wgs84''.
+boundary_subdivide_table			name					Name of the subdivided boundary table defining the AOI. Defaults to ''boundary_subdivide''.
 habitat_types_filter_negate			boolean					If false, the EUNIS L3 codes in habitat_types_filter are included, if true they are excluded. Defaults to false.
 exclude_empty_mismatched_eunis_l3	boolean					Controls whether habitats whose EUNIS L3 code is not matched in sensitivity_table are excluded (true) or included (false). Defaults to true.
 remove_overlaps						boolean					Controls whether bh3_habitat_remove_overlaps is called to remove overlaps from output_table. Defaults to false.

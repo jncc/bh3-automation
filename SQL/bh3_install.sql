@@ -1,5 +1,11 @@
 -- [Re-]installs BH3 types, procedures and functions in a database.
 
+DROP PROCEDURE IF EXISTS public.bh3_procedure(integer[], character varying[], integer, sensitivity_source, name, name, character varying, name, name, name, name, name, name, name, name, name, name, name, name, name, name, name, integer, boolean, boolean, boolean, integer);
+DROP FUNCTION IF EXISTS public.bh3_entry(integer[], character varying[], integer, sensitivity_source, name, name, character varying, name, name, name, name, name, name, name, name, name, name, name, name, name, name, name, integer, boolean, boolean, boolean, integer);
+DROP FUNCTION IF EXISTS public.bh3_sensitivity(sensitivity_source);
+DROP FUNCTION IF EXISTS public.bh3_sensitivity_layer_prep(name, name, name, sensitivity_source, integer, integer, name, character varying[], boolean, name, name, name, name, integer);
+DROP FUNCTION IF EXISTS public.bh3_species_sensitivity_clipped(name, sensitivity_source, integer, integer, name, character varying[], boolean, integer);
+
 
 
 
@@ -272,8 +278,6 @@ No nested calls';
 
 
 
-
-DROP PROCEDURE IF EXISTS public.bh3_procedure(integer[], character varying[], integer, sensitivity_source, name, name, character varying, name, name, name, name, name, name, name, name, name, name, name, name, name, name, name, integer, boolean, boolean, boolean, integer);
 
 CREATE OR REPLACE PROCEDURE public.bh3_procedure(
 	boundary_filter integer[],
@@ -1435,8 +1439,6 @@ bh3_find_srid';
 
 
 
-
-DROP FUNCTION IF EXISTS public.bh3_entry(integer[], character varying[], integer, sensitivity_source, name, name, character varying, name, name, name, name, name, name, name, name, name, name, name, name, name, name, name, integer, boolean, boolean, boolean, integer);
 
 CREATE OR REPLACE FUNCTION public.bh3_entry(
 	boundary_filter integer[],
@@ -3353,8 +3355,6 @@ No nested calls.';
 
 
 
-DROP FUNCTION IF EXISTS public.bh3_sensitivity(sensitivity_source);
-
 CREATE OR REPLACE FUNCTION public.bh3_sensitivity(
 	source_table sensitivity_source)
     RETURNS TABLE(eunis_l3_code character varying, eunis_l3_name text, characterising_species character varying, sensitivity_ab_su_num smallint, sensitivity_ab_ss_num smallint, confidence_ab_su_num smallint, confidence_ab_ss_num smallint) 
@@ -3454,8 +3454,6 @@ No nested calls.';
 
 
 
-
-DROP FUNCTION IF EXISTS public.bh3_sensitivity_layer_prep(name, name, name, sensitivity_source, integer, integer, name, character varying[], boolean, name, name, name, name, integer);
 
 CREATE OR REPLACE FUNCTION public.bh3_sensitivity_layer_prep(
 	boundary_schema name,
@@ -4237,8 +4235,6 @@ bh3_drop_temp_table';
 
 
 
-
-DROP FUNCTION IF EXISTS public.bh3_species_sensitivity_clipped(name, sensitivity_source, integer, integer, name, character varying[], boolean, integer);
 
 CREATE OR REPLACE FUNCTION public.bh3_species_sensitivity_clipped(
 	boundary_schema name,

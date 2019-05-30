@@ -3307,6 +3307,7 @@ No nested calls';
 
 
 
+DROP AGGREGATE IF EXISTS bh3_safe_union(geometry);
 DROP FUNCTION IF EXISTS public.bh3_safe_union_transfn(geometry, geometry);
 
 CREATE OR REPLACE FUNCTION public.bh3_safe_union_transfn(
@@ -3360,6 +3361,12 @@ ST_Union of the (possibly buffered) geometries, or if that fails an empty polygo
 
 Calls:
 No nested calls.';
+
+CREATE AGGREGATE public.bh3_safe_union(geometry)
+(
+    sfunc = public.bh3_safe_union_transfn,
+    stype = geometry
+);
 
 
 

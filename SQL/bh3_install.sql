@@ -1,5 +1,15 @@
 -- [Re-]installs BH3 types, procedures and functions in a database.
 
+--previous signatures
+DROP PROCEDURE IF EXISTS public.bh3_procedure(integer[], character varying[], timestamp without time zone, sensitivity_source, name, name, character varying, name, name, name, name, name, name, name, name, name, name, name, name, name, name, name, timestamp without time zone, boolean, boolean, boolean, integer);
+DROP FUNCTION IF EXISTS public.bh3_entry(integer[], character varying[], timestamp without time zone, sensitivity_source, name, name, character varying, name, name, name, name, name, name, name, name, name, name, name, name, name, name, name, timestamp without time zone, boolean, boolean, boolean, integer);
+DROP FUNCTION IF EXISTS public.bh3_disturbance_map(name, name, name, name, timestamp without time zone, timestamp without time zone, name, name, name, name, name, name, integer);
+DROP FUNCTION IF EXISTS public.bh3_get_pressure_csquares(name, name, timestamp without time zone, timestamp without time zone, name, name, name, integer);
+DROP FUNCTION IF EXISTS public.bh3_get_pressure_csquares_size(name, timestamp without time zone, timestamp without time zone, name, name, integer);
+DROP FUNCTION IF EXISTS public.bh3_sensitivity_layer_prep(name, name, name, sensitivity_source, timestamp without time zone, timestamp without time zone, name, character varying[], boolean, name, name, name, name, integer);
+DROP FUNCTION IF EXISTS public.bh3_species_sensitivity_clipped(name, sensitivity_source, timestamp without time zone, timestamp without time zone, name, character varying[], boolean, integer);
+
+--dependents of public.sensitivity_source
 DROP PROCEDURE IF EXISTS public.bh3_procedure(integer[], character varying[], integer, sensitivity_source, name, name, character varying, name, name, name, name, name, name, name, name, name, name, name, name, name, name, name, integer, boolean, boolean, boolean, integer);
 DROP FUNCTION IF EXISTS public.bh3_entry(integer[], character varying[], integer, sensitivity_source, name, name, character varying, name, name, name, name, name, name, name, name, name, name, name, name, name, name, name, integer, boolean, boolean, boolean, integer);
 DROP FUNCTION IF EXISTS public.bh3_sensitivity(sensitivity_source);

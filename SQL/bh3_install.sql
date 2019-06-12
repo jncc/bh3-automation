@@ -3374,7 +3374,14 @@ CREATE AGGREGATE public.bh3_safe_union(geometry)
 
 CREATE OR REPLACE FUNCTION public.bh3_sensitivity(
 	source_table sensitivity_source)
-    RETURNS TABLE(eunis_l3_code character varying, eunis_l3_name text, characterising_species character varying, sensitivity_ab_su_num smallint, sensitivity_ab_ss_num smallint, confidence_ab_su_num smallint, confidence_ab_ss_num smallint) 
+    RETURNS TABLE(
+		eunis_l3_code character varying
+		,eunis_l3_name text
+		,characterising_species character varying
+		,sensitivity_ab_su_num smallint
+		,sensitivity_ab_ss_num smallint
+		,confidence_ab_su_num smallint
+		,confidence_ab_ss_num smallint) 
     LANGUAGE 'plpgsql'
 
     COST 100
@@ -3385,44 +3392,44 @@ BEGIN
 	CASE source_table
 		WHEN 'broadscale_habitats' THEN
 			RETURN QUERY 
-			SELECT eunis_l3_code
+			SELECT l.eunis_l3_code
 				,NULL::text AS eunis_l3_name
 				,NULL::character varying AS characterising_species
-				,sensitivity_ab_su_num_max AS sensitivity_ab_su_num
-				,sensitivity_ab_ss_num_max AS sensitivity_ab_ss_num
-				,confidence_ab_su_num
-				,confidence_ab_ss_num
-			FROM lut.sensitivity_broadscale_habitats;
+				,l.sensitivity_ab_su_num_max AS sensitivity_ab_su_num
+				,l.sensitivity_ab_ss_num_max AS sensitivity_ab_ss_num
+				,l.confidence_ab_su_num
+				,l.confidence_ab_ss_num
+			FROM lut.sensitivity_broadscale_habitats l;
 		WHEN 'eco_groups' THEN 
 			RETURN QUERY 
 			SELECT NULL::character varying AS eunis_l3_code
 				,NULL::text AS eunis_l3_name
-				,characterising_species
-				,sensitivity_ab_su_num
-				,sensitivity_ab_ss_num
-				,confidence_ab_su_num
-				,confidence_ab_ss_num
-			FROM lut.sensitivity_eco_groups;
+				,l.characterising_species
+				,l.sensitivity_ab_su_num
+				,l.sensitivity_ab_ss_num
+				,l.confidence_ab_su_num
+				,l.confidence_ab_ss_num
+			FROM lut.sensitivity_eco_groups l;
 		WHEN 'eco_groups_rock' THEN
 			RETURN QUERY
 			SELECT NULL::character varying AS eunis_l3_code
 				,NULL::text AS eunis_l3_name
-				,characterising_species
-				,sensitivity_ab_su_num
-				,sensitivity_ab_ss_num
-				,confidence_ab_su_num
-				,confidence_ab_ss_num
-			FROM lut.sensitivity_eco_groups_rock;
+				,l.characterising_species
+				,l.sensitivity_ab_su_num
+				,l.sensitivity_ab_ss_num
+				,l.confidence_ab_su_num
+				,l.confidence_ab_ss_num
+			FROM lut.sensitivity_eco_groups_rock l;
 		WHEN 'rock' THEN
 			RETURN QUERY 
 			SELECT NULL::character varying AS eunis_l3_code
 				,NULL::text AS eunis_l3_name
-				,species_name AS characterising_species
-				,sensitivity_ab_su_num
+				,l.species_name AS characterising_species
+				,l.sensitivity_ab_su_num
 				,NULL::smallint AS sensitivity_ab_ss_num
-				,confidence_ab_ss_num
+				,l.confidence_ab_ss_num
 				,NULL::smallint AS confidence_ab_ss_num
-			FROM lut.sensitivity_rock;
+			FROM lut.sensitivity_rock l;
 		WHEN 'rock_eco_groups' THEN
 			RETURN QUERY 
 			SELECT NULL::character varying AS eunis_l3_code

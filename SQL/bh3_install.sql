@@ -1072,7 +1072,11 @@ CREATE OR REPLACE FUNCTION public.bh3_disturbance_map(
 	sensitivity_map_schema name,
 	output_schema name,
 	start_year integer,
-	end_year integer DEFAULT (date_part('year'::text, now()))::integer,
+	end_year integer DEFAULT (
+	date_part(
+	'year'::text,
+	now(
+	)))::integer,
 	boundary_table name DEFAULT 'boundary'::name,
 	sensitivity_map_table name DEFAULT 'sensitivity_map'::name,
 	pressure_map_table name DEFAULT 'pressure_map'::name,
@@ -1321,7 +1325,7 @@ BEGIN
 
 		/* loop over cursor, intersecting sensitivity polygons with pressure grid squares (using fast ST_ClipByBox2D function) */
 		rec_count := 0;
-		
+
 		LOOP
 			BEGIN
 				FETCH cand_cursor INTO cand_row;
@@ -1330,7 +1334,7 @@ BEGIN
 				rec_count := rec_count + 1;
 				RAISE INFO 'bh3_disturbance_map: Looping over cursor. Row: %. Runtime: %', rec_count, (clock_timestamp() - start_time);
 
-				geom := ST_Multi(ST_ClipByBox2D(cand_row.geom_sen, cand_row.geom_prs));
+				geom := ST_Multi(bh3_safe_ClipByBox2D(cand_row.geom_sen, cand_row.geom_prs));
 				/* repair clipped geometry if necessary */
 				IF NOT ST_IsValid(geom) THEN
 					geom := ST_Multi(ST_Buffer(geom, 0));
@@ -3249,6 +3253,49 @@ A single error record. If execution succeeds its success field will be true and 
 Calls:
 bh3_drop_temp_table
 bh3_repair_geometries';
+
+
+
+
+
+DROP FUNCTION IF EXISTS public.bh3_safe_clipbybox2d(geometry, geometry);
+
+CREATE OR REPLACE FUNCTION public.bh3_safe_clipbybox2d(
+	geom_clip geometry,
+	geom_rect geometry)
+    RETURNS geometry
+    LANGUAGE 'plpgsql'
+
+    COST 100
+    STABLE STRICT 
+AS $BODY$
+BEGIN
+	BEGIN
+    	RETURN ST_ClipByBox2D(geom_clip, geom_rect);
+    EXCEPTION
+        WHEN OTHERS THEN
+            BEGIN
+                RETURN ST_ClipByBox2D(geom_clip, ST_Envelope(geom_rect));
+			EXCEPTION
+				WHEN OTHERS THEN
+					BEGIN
+						RETURN ST_ClipByBox2D(ST_Buffer(geom_clip, 0.00000001), geom_rect);
+					EXCEPTION
+						WHEN OTHERS THEN
+							BEGIN
+								RETURN ST_ClipByBox2D(ST_Buffer(geom_clip, 0.00000001), ST_Envelope(geom_rect));
+							EXCEPTION
+								WHEN OTHERS THEN
+									RETURN ST_GeomFromText('POLYGON EMPTY');
+							END;
+					END;
+			END;
+    END;
+END
+$BODY$;
+
+ALTER FUNCTION public.bh3_safe_clipbybox2d(geometry, geometry)
+    OWNER TO bh3;
 
 
 

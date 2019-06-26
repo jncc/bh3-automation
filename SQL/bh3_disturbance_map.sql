@@ -261,7 +261,7 @@ BEGIN
 
 		/* loop over cursor, intersecting sensitivity polygons with pressure grid squares (using fast ST_ClipByBox2D function) */
 		rec_count := 0;
-		
+
 		LOOP
 			BEGIN
 				FETCH cand_cursor INTO cand_row;
@@ -270,7 +270,7 @@ BEGIN
 				rec_count := rec_count + 1;
 				RAISE INFO 'bh3_disturbance_map: Looping over cursor. Row: %. Runtime: %', rec_count, (clock_timestamp() - start_time);
 
-				geom := ST_Multi(ST_ClipByBox2D(cand_row.geom_sen, cand_row.geom_prs));
+				geom := ST_Multi(bh3_safe_ClipByBox2D(cand_row.geom_sen, cand_row.geom_prs));
 				/* repair clipped geometry if necessary */
 				IF NOT ST_IsValid(geom) THEN
 					geom := ST_Multi(ST_Buffer(geom, 0));
@@ -350,7 +350,7 @@ END;
 $BODY$;
 
 ALTER FUNCTION public.bh3_disturbance_map(name, name, name, name, integer, integer, name, name, name, name, name, name, integer)
-    OWNER TO postgres;
+    OWNER TO bh3;
 
 COMMENT ON FUNCTION public.bh3_disturbance_map(name, name, name, name, integer, integer, name, name, name, name, name, name, integer)
     IS 'Purpose:

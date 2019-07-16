@@ -308,7 +308,7 @@ BEGIN
 
 		RAISE INFO 'bh3_sensitivity_map: Populating table %.%', output_schema, output_table;
 
-		/* sensitivity_map = habitat_sensitivity_final + species_sensitivity_all_areas */
+		/* sensitivity map = habitat_sensitivity_final + species_sensitivity_max + species_sensitivity_mode_final */
 		EXECUTE format('WITH cte_union AS '
 					   '('
 						   'SELECT gid'
@@ -333,9 +333,21 @@ BEGIN
 							   ',confidence_ab_ss_num'
 							   ',sensitivity_ab_su_num'
 							   ',sensitivity_ab_ss_num '
-						   'FROM %2$I'
+						   'FROM %2$I.%3$I '
+						   'UNION '
+						   'SELECT gid'
+							   ',the_geom'
+							   ',hab_type'
+							   ',eunis_l3'
+							   ',sensitivity_ab_su_num_max'
+							   ',confidence_ab_su_num'
+							   ',sensitivity_ab_ss_num_max'
+							   ',confidence_ab_ss_num'
+							   ',sensitivity_ab_su_num'
+							   ',sensitivity_ab_ss_num '
+						   'FROM %4$I'
 					   ')'
-					   'INSERT INTO %3$I.%4$I '
+					   'INSERT INTO %5$I.%6$I '
 					   '('
 						   'gid'
 						   ',the_geom'
@@ -351,7 +363,8 @@ BEGIN
 						   ',coalesce(sensitivity_ab_su_num,sensitivity_ab_su_num_max) AS sensitivity_ab_su_num'
 						   ',coalesce(sensitivity_ab_ss_num,sensitivity_ab_ss_num_max) AS sensitivity_ab_ss_num '
 					   'FROM cte_union',
-					   habitat_sensitivity_final_table, species_sensitivity_all_areas_table, 
+					   habitat_sensitivity_final_table, species_sensitivity_schema, 
+					   species_sensitivity_max_table, species_sensitivity_mode_final_table,
 					   output_schema, output_table);
 
 		CALL bh3_index(output_schema, output_table, 

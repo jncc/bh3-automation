@@ -158,22 +158,42 @@ BEGIN
 		rows_affected := 0;
 
 		OPEN cand_cursor FOR 
-		EXECUTE format('SELECT ROW_NUMBER() OVER(PARTITION BY hab.gid,hab.hab_type,hab.eunis_l3) AS row_id'
-						   ',hab.gid'
-						   ',hab.the_geom'
-						   ',hab.hab_type'
-						   ',hab.eunis_l3'
-						   ',sbsh.sensitivity_ab_su_num_max'
-						   ',sbsh.confidence_ab_su_num'
-						   ',sbsh.sensitivity_ab_ss_num_max'
-						   ',sbsh.confidence_ab_ss_num '
-					   'FROM %1$I hab '
-						   '%2$s JOIN %3$I.%4$I sbsh ON hab.eunis_l3 = sbsh.eunis_l3_code '
-					   'WHERE the_geom IS NOT NULL '
-						   'AND NOT ST_IsEmpty(the_geom) '
-						   'AND ST_GeometryType(the_geom) ~* $1',
-					   temp_table_habitat_boundary_intersect, left_join,
-					   sensitivity_schema, sensitivity_table)
+		EXECUTE format('WITH cte_window AS '
+					   '('
+						   'SELECT RANK() OVER('
+											   'PARTITION BY '
+												   'hab.the_geom '
+											   'ORDER BY '
+												   'sbsh.sensitivity_ab_su_num_max DESC,'
+												   'sbsh.confidence_ab_su_num DESC,'
+												   'sbsh.sensitivity_ab_ss_num_max DESC,'
+												   'sbsh.confidence_ab_ss_num DESC,'
+												   'hab.gid) AS row_rank '
+							   ',hab.the_geom'
+							   ',hab.hab_type'
+							   ',hab.eunis_l3'
+							   ',sbsh.sensitivity_ab_su_num_max'
+							   ',sbsh.confidence_ab_su_num'
+							   ',sbsh.sensitivity_ab_ss_num_max'
+							   ',sbsh.confidence_ab_ss_num '
+						   'FROM %1$I hab '
+							   '%2$s JOIN %3$I.%4$I sbsh ON hab.eunis_l3 = sbsh.eunis_l3_code '
+						   'WHERE the_geom IS NOT NULL '
+							   'AND NOT ST_IsEmpty(the_geom) '
+							   'AND ST_GeometryType(the_geom) ~* $1'
+					   ')'
+					   'SELECT ROW_NUMBER() OVER(ORDER BY row_rank) AS gid'
+						   ',the_geom'
+						   ',hab_type'
+						   ',eunis_l3'
+						   ',sensitivity_ab_su_num_max'
+						   ',confidence_ab_su_num'
+						   ',sensitivity_ab_ss_num_max'
+						   ',confidence_ab_ss_num '
+					   'FROM cte_window '
+					   'WHERE row_rank = 1',
+ 					   temp_table_habitat_boundary_intersect, left_join,
+ 					   sensitivity_schema, sensitivity_table)
 		USING 'Polygon';
 
 		FETCH cand_cursor INTO cand_row;
@@ -319,7 +339,7 @@ END;
 $BODY$;
 
 ALTER FUNCTION public.bh3_habitat_boundary_clip(character varying[], name, name, name, name, name, name, name, name, boolean, boolean, boolean)
-    OWNER TO postgres;
+    OWNER TO bh3;
 
 COMMENT ON FUNCTION public.bh3_habitat_boundary_clip(character varying[], name, name, name, name, name, name, name, name, boolean, boolean, boolean)
     IS 'Purpose:

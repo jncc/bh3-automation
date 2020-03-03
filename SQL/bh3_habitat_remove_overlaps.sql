@@ -50,6 +50,39 @@ BEGIN
 		/* spatially self-join habitat_sensitivity intersecting overlapping geometries  
 		into temporary table combining attributes from both left and right sides */
 		EXECUTE format('CREATE TEMP TABLE %1$I AS '
+					   'WITH cte_window AS '
+					   '('
+						   'SELECT RANK() OVER('
+											   'PARTITION BY '
+												   'the_geom '
+											   'ORDER BY '
+												   'sensitivity_ab_su_num_max DESC,'
+												   'confidence_ab_su_num DESC,'
+												   'sensitivity_ab_ss_num_max DESC,'
+												   'confidence_ab_ss_num DESC) AS row_rank '
+							   ',gid'
+							   ',the_geom'
+							   ',hab_type'
+							   ',eunis_l3'
+							   ',sensitivity_ab_su_num_max'
+							   ',confidence_ab_su_num'
+							   ',sensitivity_ab_ss_num_max'
+							   ',confidence_ab_ss_num '
+						   'FROM %2$I.%3$I'
+					   '),'
+					   'cte_unique AS '
+					   '('
+						   'SELECT ROW_NUMBER() OVER(ORDER BY row_rank) AS gid'
+							   ',the_geom'
+							   ',hab_type'
+							   ',eunis_l3'
+							   ',sensitivity_ab_su_num_max'
+							   ',confidence_ab_su_num'
+							   ',sensitivity_ab_ss_num_max'
+							   ',confidence_ab_ss_num '
+						   'FROM cte_window '
+						   'WHERE row_rank = 1 AND NOT ST_IsEmpty(the_geom)'
+					   ') '
 					   'SELECT l.gid AS gid_l'
 						   ',l.hab_type AS hab_type_l'
 						   ',l.eunis_l3 AS eunis_l3_l'
@@ -69,8 +102,8 @@ BEGIN
 							   'WHEN ST_Touches(l.the_geom,r.the_geom) THEN NULL '
 							   'ELSE ST_Intersection(l.the_geom, r.the_geom) '
 						   'END)).geom AS the_geom '
-					   'FROM %2$I.%3$I l '
-						   'JOIN %2$I.%3$I r ON l.gid < r.gid AND ST_Intersects(l.the_geom,r.the_geom)',
+					   'FROM cte_unique l '
+						   'JOIN cte_unique r ON l.gid < r.gid AND ST_Intersects(l.the_geom,r.the_geom)',
 					   temp_table_habitat_self_join, habitat_sensitivity_schema, habitat_sensitivity_table);
 		
 		GET DIAGNOSTICS rows_affected = ROW_COUNT;
@@ -181,7 +214,7 @@ BEGIN
 						   ',confidence_ab_ss_num'
 						   ',ST_Multi(ST_Union(the_geom)) AS the_geom '
 					   'FROM cte_ranking '
-					   'WHERE ranking = 1 '
+					   'WHERE ranking = 1 AND NOT ST_IsEmpty(the_geom) '
 					   'GROUP BY gid'
 						   ',hab_type'
 						   ',eunis_l3'
@@ -354,8 +387,30 @@ BEGIN
 						   ',confidence_ab_su_num'
 						   ',sensitivity_ab_ss_num_max'
 						   ',confidence_ab_ss_num'
-					  ') '
-					   'SELECT gid'
+					   ') '
+					   'WITH cte_window AS '
+					   '('
+						   'SELECT RANK() OVER('
+											   'PARTITION BY '
+												   'the_geom '
+											   'ORDER BY '
+													'CASE WHEN ST_IsEmpty(the_geom) THEN 1 ELSE 0 END,'
+													'sensitivity_ab_su_num_max DESC,'
+													'confidence_ab_su_num DESC,'
+													'sensitivity_ab_ss_num_max DESC,'
+													'confidence_ab_ss_num DESC,'
+													'gid) AS row_rank '
+							   ',gid'
+							   ',the_geom'
+							   ',hab_type'
+							   ',eunis_l3'
+							   ',sensitivity_ab_su_num_max'
+							   ',confidence_ab_su_num'
+							   ',sensitivity_ab_ss_num_max'
+							   ',confidence_ab_ss_num '
+						   'FROM %3$I'
+					   ') '
+					   'SELECT ROW_NUMBER() OVER(ORDER BY row_rank) AS gid'
 						   ',the_geom'
 						   ',hab_type'
 						   ',eunis_l3'
@@ -363,7 +418,8 @@ BEGIN
 						   ',confidence_ab_su_num'
 						   ',sensitivity_ab_ss_num_max'
 						   ',confidence_ab_ss_num '
-					   'FROM %3$I', 
+					   'FROM cte_window '
+					   'WHERE row_rank = 1', 
 					   habitat_sensitivity_schema, habitat_sensitivity_table, 
 					   temp_table_habitat_overlaps_replaced);
 
@@ -394,7 +450,7 @@ END;
 $BODY$;
 
 ALTER FUNCTION public.bh3_habitat_remove_overlaps(name, name)
-    OWNER TO postgres;
+    OWNER TO bh3;
 
 COMMENT ON FUNCTION public.bh3_habitat_remove_overlaps(name, name)
     IS 'Purpose:

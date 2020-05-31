@@ -23,6 +23,7 @@ DECLARE
 	temp_table_habitat_unique_overlaps name;
 	temp_table_habitat_overlaps_removed name;
 	temp_table_habitat_overlaps_replaced name;
+	error_rec record;
 
 BEGIN
 	BEGIN

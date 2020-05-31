@@ -84,7 +84,7 @@ BEGIN
 									'sen.%4$I DESC,'
 									'sen.%5$I DESC,'
 									'sen.%6$I DESC,'
-									'sen.%7$I DESC'
+									'sen.%7$I DESC,'
 									'hab.%8$I) AS ranking'
 							   ',hab.%8$I'
 							   ',hab.%3$I'

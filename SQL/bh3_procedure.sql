@@ -25,13 +25,13 @@ CREATE OR REPLACE PROCEDURE public.bh3_procedure(
 	disturbance_map_table name DEFAULT 'disturbance_map'::name,
 	sar_surface_column name DEFAULT 'sar_surface'::name,
 	sar_subsurface_column name DEFAULT 'sar_subsurface'::name,
-	end_year integer DEFAULT (date_part('year'::text, now()))::integer,
+	end_year integer DEFAULT (date_part('year'::text,
+	now()))::integer,
 	boundary_filter_negate boolean DEFAULT false,
 	habitat_types_filter_negate boolean DEFAULT false,
 	remove_overlaps boolean DEFAULT false,
 	output_srid integer DEFAULT 4326)
 LANGUAGE 'plpgsql'
-
 AS $BODY$
 DECLARE
 	start_time timestamp;
@@ -52,253 +52,287 @@ BEGIN
 	boundary_subdivide_table := 'boundary_subdivide'::name;
 	boundary_subdivide_union_table := 'boundary'::name;
 	
-	BEGIN
-		/* create output_schema if it doesn't already exist */
-		IF output_owner IS NOT NULL THEN
-			EXECUTE format('SET ROLE %1$I', output_owner);
-			EXECUTE format('DROP SCHEMA IF EXISTS %1$I CASCADE', output_schema);
-			EXECUTE format('CREATE SCHEMA IF NOT EXISTS %1$I AUTHORIZATION %2$I', output_schema, output_owner);
-		ELSE
-			EXECUTE format('CREATE SCHEMA IF NOT EXISTS %1$I', output_schema);
-		END IF;
+	/* create output_schema if it doesn't already exist */
+	IF output_owner IS NOT NULL THEN
+		EXECUTE format('SET ROLE %1$I', output_owner);
+		EXECUTE format('DROP SCHEMA IF EXISTS %1$I CASCADE', output_schema);
+		EXECUTE format('CREATE SCHEMA IF NOT EXISTS %1$I AUTHORIZATION %2$I', output_schema, output_owner);
+	ELSE
+		EXECUTE format('CREATE SCHEMA IF NOT EXISTS %1$I', output_schema);
+	END IF;
 
-		/* drop any previous error_log table in output_schema */
-		EXECUTE format('DROP TABLE IF EXISTS %1$I.error_log', output_schema);
+	/* drop any previous error_log table in output_schema */
+	EXECUTE format('DROP TABLE IF EXISTS %1$I.error_log', output_schema);
 
-		/* create error_log table in output_schema */
-		EXECUTE format('CREATE TABLE IF NOT EXISTS %1$I.error_log '
+	/* create error_log table in output_schema */
+	EXECUTE format('CREATE TABLE IF NOT EXISTS %1$I.error_log '
+				   '('
+					   'context text,'
+					   'record_gid bigint,'
+					   'exception_text text,'
+					   'exception_detail text,'
+					   'exception_hint text'
+				   ')',
+				   output_schema);
+
+	RAISE INFO 'Calling bh3_get_pressure_csquares_size: %', (clock_timestamp() - start_time);
+
+	/* determine the c-square size from the pressure tables */
+	SELECT * 
+	FROM bh3_get_pressure_csquares_size(
+		pressure_schema
+		,start_year
+		,end_year
+		,sar_surface_column
+		,sar_subsurface_column
+		,output_srid
+	) INTO cell_size_degrees;
+
+	IF cell_size_degrees IS NULL OR cell_size_degrees < 0 THEN
+		RAISE INFO 'Failed to obtain a consisten cell size from tables in pressure schema %', pressure_schema;
+		RETURN;
+	END IF;
+
+	RAISE INFO 'Calling bh3_boundary_subdivide: %', (clock_timestamp() - start_time);
+
+	SELECT * 
+	FROM bh3_boundary_subdivide(
+		boundary_filter,
+		output_schema,
+		boundary_subdivide_union_table,
+		boundary_subdivide_table,
+		boundary_schema,
+		boundary_table,
+		boundary_filter_negate
+	) INTO error_rec;
+
+	IF error_rec IS NOT NULL AND NOT error_rec.success THEN
+		EXECUTE format('INSERT INTO %1$I.error_log '
 					   '('
-						   'context text,'
-						   'record_gid bigint,'
-						   'exception_text text,'
-						   'exception_detail text,'
-						   'exception_hint text'
-					   ')',
-					   output_schema);
+						   'context,'
+						   'exception_text,'
+						   'exception_detail,'
+						   'exception_hint'
+					   ') '
+					   'VALUES ($1,$2,$3,$4)',
+			   output_schema)
+		USING 'bh3_boundary_subdivide', error_rec.exc_text, error_rec.exc_detail, error_rec.exc_hint;
+		error_count := error_count + 1;
+		ROLLBACK;
+		RETURN;
+	ELSE
+		COMMIT;
+	END IF;
 
-		RAISE INFO 'Calling bh3_get_pressure_csquares_size: %', (clock_timestamp() - start_time);
+	RAISE INFO 'Calling bh3_habitat_boundary_clip: %', (clock_timestamp() - start_time);
 
-		/* determine the c-square size from the pressure tables */
+	/* create habitat_sensitivity for selected AOI in output_schema */
+	SELECT * 
+	FROM bh3_habitat_boundary_clip(
+		habitat_types_filter
+		,output_schema
+		,habitat_sensitivity_table
+		,habitat_schema
+		,habitat_table
+		,habitat_sensitivity_lookup_schema
+		,habitat_sensitivity_lookup_table
+		,output_schema
+		,boundary_subdivide_table
+		,habitat_types_filter_negate
+		,true
+		,remove_overlaps
+	) INTO error_rec;
+
+	IF error_rec IS NOT NULL AND NOT error_rec.success THEN
+		EXECUTE format('INSERT INTO %1$I.error_log '
+					   '('
+						   'context,'
+						   'exception_text,'
+						   'exception_detail,'
+						   'exception_hint'
+					   ') '
+					   'VALUES ($1,$2,$3,$4)',
+			   output_schema)
+		USING 'bh3_habitat_boundary_clip', error_rec.exc_text, error_rec.exc_detail, error_rec.exc_hint;
+		error_count := error_count + 1;
+		ROLLBACK;
+		RETURN;
+	ELSE
+		COMMIT;
+	END IF;
+
+	RAISE INFO 'Calling bh3_remove_duplicate_geometries: %', (clock_timestamp() - start_time);
+
+	/* remove duplicates from habitat_sensitivity table */
+	SELECT * FROM public.bh3_remove_duplicate_geometries(
+		output_schema
+		,habitat_sensitivity_table
+		,ARRAY[ ['sensitivity_ab_su_num_max','DESC'],
+			  ['confidence_ab_su_num','DESC'],
+			  ['sensitivity_ab_ss_num_max','DESC'],
+			  ['confidence_ab_ss_num','DESC'] ]) INTO error_rec;
+
+	IF error_rec IS NOT NULL AND NOT error_rec.success THEN
+		EXECUTE format('INSERT INTO %1$I.error_log '
+					   '('
+						   'context,'
+						   'exception_text,'
+						   'exception_detail,'
+						   'exception_hint'
+					   ') '
+					   'VALUES ($1,$2,$3,$4)',
+			   output_schema)
+		USING 'bh3_remove_duplicate_geometries', error_rec.exc_text, error_rec.exc_detail, error_rec.exc_hint;
+		error_count := error_count + 1;
+		ROLLBACK;
+		RETURN;
+	ELSE
+		COMMIT;
+	END IF;
+
+	start_time := clock_timestamp();
+
+	RAISE INFO 'Calling bh3_habitat_grid: %', (clock_timestamp() - start_time);
+
+	/* grid habitat_sensitivity into create habitat_sensitivity_grid  */
+	FOR error_curs_rec IN 
 		SELECT * 
-		FROM bh3_get_pressure_csquares_size(
-			pressure_schema
-			,start_year
-			,end_year
-			,sar_surface_column
-			,sar_subsurface_column
-			,output_srid
-		) INTO cell_size_degrees;
-		
-		IF cell_size_degrees IS NULL OR cell_size_degrees < 0 THEN
-			RAISE INFO 'Failed to obtain a consisten cell size from tables in pressure schema %', pressure_schema;
-			RETURN;
-		END IF;
-
-		RAISE INFO 'Calling bh3_boundary_subdivide: %', (clock_timestamp() - start_time);
-
-		SELECT * 
-		FROM bh3_boundary_subdivide(
-			boundary_filter,
-			output_schema,
-			boundary_subdivide_union_table,
-			boundary_subdivide_table,
-			boundary_schema,
-			boundary_table,
-			boundary_filter_negate
-		) INTO error_rec;
-
-		IF error_rec IS NOT NULL AND NOT error_rec.success THEN
-			EXECUTE format('INSERT INTO %1$I.error_log '
-						   '('
-							   'context,'
-							   'exception_text,'
-							   'exception_detail,'
-							   'exception_hint'
-						   ') '
-						   'VALUES ($1,$2,$3,$4)',
-				   output_schema)
-			USING 'bh3_boundary_subdivide', error_rec.exc_text, error_rec.exc_detail, error_rec.exc_hint;
-			error_count := error_count + 1;
-			RETURN;
-		END IF;
-
-		RAISE INFO 'Calling bh3_habitat_boundary_clip: %', (clock_timestamp() - start_time);
-
-		/* create habitat_sensitivity for selected AOI in output_schema */
-		SELECT * 
-		FROM bh3_habitat_boundary_clip(
-			habitat_types_filter
-			,output_schema
-			,habitat_sensitivity_table
-			,habitat_schema
-			,habitat_table
-			,habitat_sensitivity_lookup_schema
-			,habitat_sensitivity_lookup_table
-			,output_schema
-			,boundary_subdivide_table
-			,habitat_types_filter_negate
-			,true
-			,remove_overlaps
-		) INTO error_rec;
-
-		IF error_rec IS NOT NULL AND NOT error_rec.success THEN
-			EXECUTE format('INSERT INTO %1$I.error_log '
-						   '('
-							   'context,'
-							   'exception_text,'
-							   'exception_detail,'
-							   'exception_hint'
-						   ') '
-						   'VALUES ($1,$2,$3,$4)',
-				   output_schema)
-			USING 'bh3_habitat_boundary_clip', error_rec.exc_text, error_rec.exc_detail, error_rec.exc_hint;
-			error_count := error_count + 1;
-			RETURN;
-		END IF;
-
-		RAISE INFO 'Calling bh3_habitat_grid: %', (clock_timestamp() - start_time);
-
-		/* grid habitat_sensitivity into create habitat_sensitivity_grid  */
-		FOR error_curs_rec IN 
-			SELECT * 
-			FROM bh3_habitat_grid(
-				output_schema
-				,output_schema
-				,output_schema
-				,boundary_subdivide_union_table
-				,habitat_sensitivity_table
-				,habitat_sensitivity_grid_table
-				,cell_size_degrees
-			)
-		LOOP
-			EXECUTE format('INSERT INTO %1$I.error_log '
-						   '('
-							   'context,'
-							   'record_gid,'
-							   'exception_text,'
-							   'exception_detail,'
-							   'exception_hint'
-						   ') '
-						   'VALUES ($1,$2,$3,$4,$5)',
-				   output_schema)
-			USING 'bh3_habitat_grid', error_curs_rec.gid, error_curs_rec.exc_text, 
-				error_curs_rec.exc_detail, error_curs_rec.exc_hint;
-			error_count := error_count + 1;
-		END LOOP;
-
-		RAISE INFO 'Calling bh3_sensitivity_layer_prep: %', (clock_timestamp() - start_time);
-
-		/* create species_sensitivity_max and species_sensitivity_mode for selected AOI in 
-		output_schema using habitat_sensitivity and habitat_sensitivity_grid created in presvious step */
-		SELECT * 
-		FROM bh3_sensitivity_layer_prep(
+		FROM bh3_habitat_grid(
 			output_schema
 			,output_schema
 			,output_schema
-			,species_sensitivity_source_table
+			,boundary_subdivide_union_table
+			,habitat_sensitivity_table
+			,habitat_sensitivity_grid_table
+			,cell_size_degrees
+		)
+	LOOP
+		EXECUTE format('INSERT INTO %1$I.error_log '
+					   '('
+						   'context,'
+						   'record_gid,'
+						   'exception_text,'
+						   'exception_detail,'
+						   'exception_hint'
+					   ') '
+					   'VALUES ($1,$2,$3,$4,$5)',
+			   output_schema)
+		USING 'bh3_habitat_grid', error_curs_rec.gid, error_curs_rec.exc_text, 
+			error_curs_rec.exc_detail, error_curs_rec.exc_hint;
+		error_count := error_count + 1;
+	END LOOP;
+
+	RAISE INFO 'Calling bh3_sensitivity_layer_prep: %', (clock_timestamp() - start_time);
+
+	/* create species_sensitivity_max and species_sensitivity_mode for selected AOI in 
+	output_schema using habitat_sensitivity and habitat_sensitivity_grid created in presvious step */
+	SELECT * 
+	FROM bh3_sensitivity_layer_prep(
+		output_schema
+		,output_schema
+		,output_schema
+		,species_sensitivity_source_table
+		,start_year
+		,end_year
+		,boundary_subdivide_union_table
+		,habitat_types_filter
+		,habitat_types_filter_negate
+		,habitat_sensitivity_table
+		,habitat_sensitivity_grid_table
+		,species_sensitivity_max_table
+		,species_sensitivity_mode_table
+		,output_srid
+	) INTO error_rec;
+
+	IF error_rec IS NOT NULL AND NOT error_rec.success THEN
+		EXECUTE format('INSERT INTO %1$I.error_log '
+					   '('
+						   'context,'
+						   'exception_text,'
+						   'exception_detail,'
+						   'exception_hint'
+					   ') '
+					   'VALUES ($1,$2,$3,$4)',
+			   output_schema)
+		USING 'bh3_sensitivity_layer_prep', error_rec.exc_text, error_rec.exc_detail, error_rec.exc_hint;
+		error_count := error_count + 1;
+		ROLLBACK;
+		RETURN;
+	ELSE
+		COMMIT;
+	END IF;
+
+	RAISE INFO 'Calling bh3_sensitivity_map: %', (clock_timestamp() - start_time);
+
+	/* create sensitivity_map in output_schema from habitat_sensitivity, species_sensitivity_max 
+	and species_sensitivity_mode tables, all located in schema output_schema */
+	SELECT * 
+	FROM bh3_sensitivity_map(
+		output_schema
+		,output_schema
+		,output_schema
+		,habitat_sensitivity_table
+		,species_sensitivity_max_table
+		,species_sensitivity_mode_table
+		,sensitivity_map_table
+	) INTO error_rec;
+
+	IF error_rec IS NOT NULL AND NOT error_rec.success THEN
+		EXECUTE format('INSERT INTO %1$I.error_log '
+					   '('
+						   'context,'
+						   'exception_text,'
+						   'exception_detail,'
+						   'exception_hint'
+					   ') '
+					   'VALUES ($1,$2,$3,$4)',
+			   output_schema)
+		USING 'bh3_sensitivity_map', error_rec.exc_text, error_rec.exc_detail, error_rec.exc_hint;
+		error_count := error_count + 1;
+		ROLLBACK;
+		RETURN;
+	ELSE
+		COMMIT;
+	END IF;
+
+	RAISE INFO 'Calling bh3_disturbance_map: %', (clock_timestamp() - start_time);
+
+	/* create disturbance_map for selected AOI in output_schema from sensitivity_map 
+	in output_schema and pressure tables in pressure_schema. */
+	FOR error_curs_rec IN 
+		SELECT *
+		FROM bh3_disturbance_map(
+			output_schema
+			,pressure_schema
+			,output_schema
+			,output_schema
 			,start_year
 			,end_year
 			,boundary_subdivide_union_table
-			,habitat_types_filter
-			,habitat_types_filter_negate
-			,habitat_sensitivity_table
-			,habitat_sensitivity_grid_table
-			,species_sensitivity_max_table
-			,species_sensitivity_mode_table
-			,output_srid
-		) INTO error_rec;
-
-		IF error_rec IS NOT NULL AND NOT error_rec.success THEN
-			EXECUTE format('INSERT INTO %1$I.error_log '
-						   '('
-							   'context,'
-							   'exception_text,'
-							   'exception_detail,'
-							   'exception_hint'
-						   ') '
-						   'VALUES ($1,$2,$3,$4)',
-				   output_schema)
-			USING 'bh3_sensitivity_layer_prep', error_rec.exc_text, error_rec.exc_detail, error_rec.exc_hint;
-			error_count := error_count + 1;
-			RETURN;
-		END IF;
-
-		RAISE INFO 'Calling bh3_sensitivity_map: %', (clock_timestamp() - start_time);
-
-		/* create sensitivity_map in output_schema from habitat_sensitivity, species_sensitivity_max 
-		and species_sensitivity_mode tables, all located in schema output_schema */
-		SELECT * 
-		FROM bh3_sensitivity_map(
-			output_schema
-			,output_schema
-			,output_schema
-			,habitat_sensitivity_table
-			,species_sensitivity_max_table
-			,species_sensitivity_mode_table
 			,sensitivity_map_table
-		) INTO error_rec;
+			,pressure_map_table
+			,disturbance_map_table
+			,sar_surface_column
+			,sar_subsurface_column
+			,output_srid) 
+	LOOP
+		EXECUTE format('INSERT INTO %1$I.error_log '
+					   '('
+						   'context,'
+						   'record_gid,'
+						   'exception_text,'
+						   'exception_detail,'
+						   'exception_hint'
+					   ') '
+					   'VALUES ($1,$2,$3,$4,$5)',
+			   output_schema)
+		USING 'bh3_disturbance_map', error_curs_rec.gid, error_curs_rec.exc_text, error_curs_rec.exc_detail, error_curs_rec.exc_hint;
+		error_count := error_count + 1;
+	END LOOP;
 
-		IF error_rec IS NOT NULL AND NOT error_rec.success THEN
-			EXECUTE format('INSERT INTO %1$I.error_log '
-						   '('
-							   'context,'
-							   'exception_text,'
-							   'exception_detail,'
-							   'exception_hint'
-						   ') '
-						   'VALUES ($1,$2,$3,$4)',
-				   output_schema)
-			USING 'bh3_sensitivity_map', error_rec.exc_text, error_rec.exc_detail, error_rec.exc_hint;
-			error_count := error_count + 1;
-			RETURN;
-		END IF;
-
-		RAISE INFO 'Calling bh3_disturbance_map: %', (clock_timestamp() - start_time);
-
-		/* create disturbance_map for selected AOI in output_schema from sensitivity_map 
-		in output_schema and pressure tables in pressure_schema. */
-		FOR error_curs_rec IN 
-			SELECT *
-			FROM bh3_disturbance_map(
-				output_schema
-				,pressure_schema
-				,output_schema
-				,output_schema
-				,start_year
-				,end_year
-				,boundary_subdivide_union_table
-				,sensitivity_map_table
-				,pressure_map_table
-				,disturbance_map_table
-				,sar_surface_column
-				,sar_subsurface_column
-				,output_srid) 
-		LOOP
-			EXECUTE format('INSERT INTO %1$I.error_log '
-						   '('
-							   'context,'
-							   'record_gid,'
-							   'exception_text,'
-							   'exception_detail,'
-							   'exception_hint'
-						   ') '
-						   'VALUES ($1,$2,$3,$4,$5)',
-				   output_schema)
-			USING 'bh3_disturbance_map', error_curs_rec.gid, error_curs_rec.exc_text, error_curs_rec.exc_detail, error_curs_rec.exc_hint;
-			error_count := error_count + 1;
-		END LOOP;
-
-		IF error_count = 0 THEN
-			EXECUTE format('DROP TABLE IF EXISTS %1$I.error_log', output_schema);
-		END IF;
-	EXCEPTION WHEN OTHERS THEN
-		GET STACKED DIAGNOSTICS exc_text = MESSAGE_TEXT,
-								  exc_detail = PG_EXCEPTION_DETAIL,
-								  exc_hint = PG_EXCEPTION_HINT;
-		RAISE INFO 'Error text: %', exc_text;
-		RAISE INFO 'Error detail: %', exc_detail;
-		RAISE INFO 'Error hint: %', exc_hint;
-	END;
+	IF error_count = 0 THEN
+		EXECUTE format('DROP TABLE IF EXISTS %1$I.error_log', output_schema);
+	END IF;
 	
 	EXECUTE format('DROP TABLE IF EXISTS %1$I.%2$I', output_schema, boundary_subdivide_table);
 	EXECUTE format('DROP TABLE IF EXISTS %1$I.%2$I', output_schema, boundary_subdivide_union_table);
@@ -311,7 +345,7 @@ BEGIN
 END;
 $BODY$;
 
-COMMENT ON PROCEDURE public.bh3_procedure
+COMMENT ON PROCEDURE public.bh3_procedure(integer[], character varying[], integer, sensitivity_source, name, name, character varying, name, name, name, name, name, name, name, name, name, name, name, name, name, name, name, integer, boolean, boolean, boolean, integer)
     IS 'Purpose:
 Main entry point that starts a BH3 run. 
 This is called by the QGIS user interface and may be executed directly in pgAdmin or on the PostgreSQL command line.

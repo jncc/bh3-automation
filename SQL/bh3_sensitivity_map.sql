@@ -133,7 +133,7 @@ BEGIN
 						   ',d.confidence_ab_ss_num'
 						   ',d.sensitivity_ab_su_num'
 						   ',d.sensitivity_ab_ss_num'
-						   ',r.the_geom '
+						   ',ST_CollectionExtract(r.the_geom, 3) '
 					   'FROM cte_diff d '
 						   'JOIN cte_repair r ON d.gid = r.gid', 
 					   species_sensitivity_mode_final_table, species_sensitivity_schema, 
@@ -279,7 +279,7 @@ BEGIN
 						   ',d.confidence_ab_su_num'
 						   ',d.sensitivity_ab_ss_num_max'
 						   ',d.confidence_ab_ss_num'
-						   ',r.the_geom '
+						   ',ST_CollectionExtract(r.the_geom, 3) '
 					   'FROM cte_diff d '
 						   'JOIN cte_repair r ON d.gid = r.gid', 
 					   habitat_sensitivity_final_table, habitat_sensitivity_schema, 
@@ -390,7 +390,7 @@ END;
 $BODY$;
 
 ALTER FUNCTION public.bh3_sensitivity_map(name, name, name, name, name, name, name)
-    OWNER TO postgres;
+    OWNER TO bh3;
 
 COMMENT ON FUNCTION public.bh3_sensitivity_map(name, name, name, name, name, name, name)
     IS 'Purpose:

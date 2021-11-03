@@ -1,19 +1,25 @@
 -- FUNCTION: public.bh3_safe_difference(geometry, geometry)
 
--- DROP FUNCTION public.bh3_safe_difference(geometry, geometry);
+-- DROP FUNCTION IF EXISTS public.bh3_safe_difference(geometry, geometry);
 
 CREATE OR REPLACE FUNCTION public.bh3_safe_difference(
 	geom_from geometry,
 	geom_erase geometry)
     RETURNS geometry
     LANGUAGE 'plpgsql'
-
     COST 100
-    STABLE STRICT 
+    STABLE STRICT PARALLEL UNSAFE
 AS $BODY$
+DECLARE
+	g geometry;
 BEGIN
 	BEGIN
-    	RETURN ST_Difference(geom_from, geom_erase);
+		g := ST_Difference(geom_from, geom_erase);
+		IF ST_Area(g) > 0 THEN
+			RETURN g;
+		ELSE
+			RETURN ST_GeomFromText('POLYGON EMPTY');
+		END IF;
     EXCEPTION
         WHEN OTHERS THEN
             BEGIN
@@ -27,7 +33,7 @@ END
 $BODY$;
 
 ALTER FUNCTION public.bh3_safe_difference(geometry, geometry)
-    OWNER TO postgres;
+    OWNER TO bh3;
 
 COMMENT ON FUNCTION public.bh3_safe_difference(geometry, geometry)
     IS 'Purpose:

@@ -99,6 +99,9 @@ BEGIN
 END;
 $BODY$;
 
+ALTER FUNCTION public.bh3_remove_duplicate_habitats(name, name, name, name)
+    OWNER TO postgres;
+
 COMMENT ON FUNCTION public.bh3_remove_duplicate_habitats(name, name, name, name)
     IS 'Purpose:
 Removes duplicate geometries from the UK habitat map, creating a copy of the input table.

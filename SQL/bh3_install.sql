@@ -296,6 +296,8 @@ CREATE OR REPLACE PROCEDURE public.bh3_procedure(
 	species_sensitivity_source_table sensitivity_source,
 	pressure_schema name,
 	output_schema name,
+	species_start_year integer,
+  species_end_year integer,
 	output_owner character varying DEFAULT NULL::character varying,
 	boundary_schema name DEFAULT 'static'::name,
 	boundary_table name DEFAULT 'unofficial_country_waters_simplified_wgs84'::name,
@@ -483,8 +485,8 @@ BEGIN
 			,output_schema
 			,output_schema
 			,species_sensitivity_source_table
-			,start_year
-			,end_year
+      ,species_start_year
+      ,species_end_year
 			,boundary_subdivide_union_table
 			,habitat_types_filter
 			,habitat_types_filter_negate
@@ -615,6 +617,8 @@ start_year							integer							Earliest year for Marine Recorder spcies samples 
 species_sensitivity_source_table	sensitivity_source				Source table for habitat sensitivity scores (enum value one of { ''broadscale_habitats'', ''eco_groups'', ''rock'', ''rock_eco_groups'' }).
 pressure_schema						name							Schema in which pressure source tables are located (all tables in this schema that have the required columns will be used).
 output_schema						name							Schema in which output tables will be created (will be created if it does not already exist; tables in it will be overwritten).
+species_start_year                  integer               The start year to select species records from 
+species_end_year                    integer               The end year to select sepecies records from
 output_owner						character varying				Role that will own output schema and tables. Defaults to NULL, which means the user running the procedure.
 boundary_schema						name							Schema of table containing AOI boundary polygons. Defaults to ''static''.
 boundary_table						name							Name of table containing AOI boundary polygons. Defaults to ''unofficial_country_waters_simplified_wgs84''.
@@ -1345,6 +1349,7 @@ BEGIN
 							   'WHEN sen.sensitivity_ab_su_num = 5 AND prs.sar_surface_cat_comb = 3 THEN 9 '
 							   'WHEN sen.sensitivity_ab_su_num = 5 AND prs.sar_surface_cat_comb = 4 THEN 9 '
 							   'WHEN sen.sensitivity_ab_su_num = 5 AND prs.sar_surface_cat_comb = 5 THEN 9 '
+								 'WHEN sen.sensitivity_ab_su_num < 0 AND prs.sar_surface_cat_comb > 0 THEN -1 '
 							   'ELSE 0 '
 						   'END AS disturbance_ab_su'
 						   ',CASE '
@@ -1373,6 +1378,7 @@ BEGIN
 							   'WHEN sen.sensitivity_ab_ss_num = 5 AND prs.sar_subsurface_cat_comb = 3 THEN 9 '
 							   'WHEN sen.sensitivity_ab_ss_num = 5 AND prs.sar_subsurface_cat_comb = 4 THEN 9 '
 							   'WHEN sen.sensitivity_ab_ss_num = 5 AND prs.sar_subsurface_cat_comb = 5 THEN 9 '
+								 'WHEN sen.sensitivity_ab_ss_num < 0 AND prs.sar_subsurface_cat_comb > 0 THEN -1 '	
 							   'ELSE 0 '
 						   'END AS disturbance_ab_ss'
 						   ',%1$s AS geom_sen'
@@ -4092,7 +4098,7 @@ BEGIN
 						   ',d.confidence_ab_ss_num'
 						   ',d.sensitivity_ab_su_num'
 						   ',d.sensitivity_ab_ss_num'
-						   ',r.the_geom '
+						   ',ST_CollectionExtract(r.the_geom, 3) '
 					   'FROM cte_diff d '
 						   'JOIN cte_repair r ON d.gid = r.gid', 
 					   species_sensitivity_mode_final_table, species_sensitivity_schema, 
@@ -4238,7 +4244,7 @@ BEGIN
 						   ',d.confidence_ab_su_num'
 						   ',d.sensitivity_ab_ss_num_max'
 						   ',d.confidence_ab_ss_num'
-						   ',r.the_geom '
+						   ',ST_CollectionExtract(r.the_geom, 3) '
 					   'FROM cte_diff d '
 						   'JOIN cte_repair r ON d.gid = r.gid', 
 					   habitat_sensitivity_final_table, habitat_sensitivity_schema, 

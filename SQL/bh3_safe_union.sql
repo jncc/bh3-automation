@@ -7,16 +7,22 @@ CREATE OR REPLACE FUNCTION public.bh3_safe_union_transfn(
 	el geometry)
     RETURNS geometry
     LANGUAGE 'plpgsql'
-
     COST 100
-    IMMUTABLE 
+    IMMUTABLE PARALLEL UNSAFE
 AS $BODY$
+DECLARE
+	g geometry;
 BEGIN
 	IF agg_state IS NULL THEN
     	RETURN el;
 	ELSIF el IS NOT NULL THEN
 		BEGIN
-			RETURN ST_Union(agg_state, el);
+			g := ST_Union(agg_state, el);
+			IF ST_Area(g) > 0 THEN
+				RETURN g;
+			ELSE
+				RETURN ST_GeomFromText('POLYGON EMPTY');
+			END IF;
 		EXCEPTION
 			WHEN OTHERS THEN
 				BEGIN
@@ -31,6 +37,7 @@ BEGIN
 	END IF;
 END;
 $BODY$;
+
 
 ALTER FUNCTION public.bh3_safe_union_transfn(geometry, geometry)
     OWNER TO postgres;

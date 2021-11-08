@@ -1,6 +1,6 @@
 -- FUNCTION: public.bh3_sensitivity_map(name, name, name, name, name, name, name)
 
--- DROP FUNCTION public.bh3_sensitivity_map(name, name, name, name, name, name, name);
+-- DROP FUNCTION IF EXISTS public.bh3_sensitivity_map(name, name, name, name, name, name, name);
 
 CREATE OR REPLACE FUNCTION public.bh3_sensitivity_map(
 	habitat_sensitivity_schema name,
@@ -16,9 +16,8 @@ CREATE OR REPLACE FUNCTION public.bh3_sensitivity_map(
 	OUT exc_hint text)
     RETURNS record
     LANGUAGE 'plpgsql'
-
     COST 100
-    VOLATILE 
+    VOLATILE PARALLEL UNSAFE
 AS $BODY$
 DECLARE
 	tn name;
@@ -49,7 +48,8 @@ BEGIN
 
 		RAISE INFO 'bh3_sensitivity_map: Creating temporary table %', species_sensitivity_mode_final_table;
 
-		/* species_sensitivity_mode_final = species_sensitivity_mode - species_sensitivity_maximum */
+		/* species_sensitivity_mode_final = species_sensitivity_mode - species_sensitivity_maximum 
+		(union of intersecting with max erased from mode geometries and non-intesecting) */
 		EXECUTE format('CREATE TEMP TABLE %1$I AS '
 					   'WITH cte_join AS '
 					   '('
@@ -65,9 +65,9 @@ BEGIN
 							   ',mod.the_geom'
 							   ',max.the_geom AS the_geom_erase '
 						   'FROM %2$I.%3$I mod '
-							   'LEFT JOIN %2$I.%4$I max ON ST_Intersects(mod.the_geom,max.the_geom) ' 
+							   'LEFT JOIN  %2$I.%4$I max ON ST_Intersects(mod.the_geom,max.the_geom) '
 								   'AND NOT ST_Touches(mod.the_geom,max.the_geom)'
-					   '),'
+					  '),'
 					   'cte_diff AS '
 					   '('
 						   'SELECT gid'
@@ -79,7 +79,7 @@ BEGIN
 							   ',confidence_ab_ss_num'
 							   ',sensitivity_ab_su_num'
 							   ',sensitivity_ab_ss_num'
-							   ',bh3_safe_difference(the_geom,bh3_safe_union(the_geom_erase)) AS the_geom '
+							   ',ST_Multi(ST_CollectionExtract(bh3_safe_difference(the_geom,bh3_safe_union(the_geom_erase)),3)) AS the_geom '
 						   'FROM cte_join '
 						   'WHERE the_geom_erase IS NOT NULL '
 						   'GROUP BY gid'
@@ -105,24 +105,6 @@ BEGIN
 							   ',the_geom '
 						   'FROM cte_join '
 						   'WHERE the_geom_erase IS NULL'
-					   '),'
-					   'cte_repair AS '
-					   '('
-						   'WITH cte_dump AS '
-						   '('
-							   'SELECT gid'
-								   ',(ST_Dump(the_geom)).geom AS the_geom '
-							   'FROM cte_diff '
-							   'WHERE NOT ST_IsEmpty(the_geom)'
-						   ') '
-						   'SELECT gid'
-							   ',ST_Multi(ST_Union('
-								   'CASE '
-									   'WHEN ST_IsValid(the_geom) THEN the_geom '
-									   'ELSE ST_Buffer(the_geom,0) '
-							   'END)) AS the_geom '
-						   'FROM cte_dump '
-						   'GROUP BY gid'
 					   ') '
 					   'SELECT d.gid'
 						   ',d.hab_type'
@@ -135,7 +117,7 @@ BEGIN
 						   ',d.sensitivity_ab_ss_num'
 						   ',ST_CollectionExtract(r.the_geom, 3) '
 					   'FROM cte_diff d '
-						   'JOIN cte_repair r ON d.gid = r.gid', 
+					   'WHERE NOT ST_IsEmpty(d.the_geom)',
 					   species_sensitivity_mode_final_table, species_sensitivity_schema, 
 					   species_sensitivity_mode_table, species_sensitivity_max_table);
 		
@@ -149,7 +131,7 @@ BEGIN
 
 		RAISE INFO 'bh3_sensitivity_map: Creating temporary table %', species_sensitivity_all_areas_table;
 
-		/* species_sensitivity_all_areas = species_sensitivity_mode_final + species_sensitivity_max */
+		/* species_sensitivity_all_areas = species_sensitivity_mode_final + species_sensitivity_max (union) */
 		EXECUTE format('CREATE TEMP TABLE %1$I AS '
 					   'WITH cte_union AS '
 					   '('
@@ -205,7 +187,8 @@ BEGIN
 
 		RAISE INFO 'bh3_sensitivity_map: Creating temporary table %', habitat_sensitivity_final_table;
 
-		/* habitat_sensitivity_final = habitat_sensitivity - species_sensitivity_all_areas */
+		/* habitat_sensitivity_final = habitat_sensitivity - species_sensitivity_all_areas 
+		(union of intersecting with all areas erased from hab sensitivity geometries and non-intesecting) */
 		EXECUTE format('CREATE TABLE %1$I AS '
 					   'WITH cte_join AS '
 					   '('
@@ -231,7 +214,7 @@ BEGIN
 					   			',confidence_ab_su_num'
 					   			',sensitivity_ab_ss_num_max'
 					   			',confidence_ab_ss_num'
-					   			',bh3_safe_difference(the_geom,bh3_safe_union(the_geom_erase)) AS the_geom '
+							   ',ST_Multi(ST_CollectionExtract(bh3_safe_difference(the_geom,bh3_safe_union(the_geom_erase)),3)) AS the_geom '
 						   'FROM cte_join '
 						   'WHERE the_geom_erase IS NOT NULL '
 						   'GROUP BY gid'
@@ -253,24 +236,6 @@ BEGIN
 							   ',the_geom '
 						   'FROM cte_join '
 						   'WHERE the_geom_erase IS NULL'
-					   '),'
-					   'cte_repair AS '
-					   '('
-						   'WITH cte_dump AS '
-						   '('
-							   'SELECT gid'
-								   ',(ST_Dump(the_geom)).geom AS the_geom '
-							   'FROM cte_diff '
-							   'WHERE NOT ST_IsEmpty(the_geom)'
-						   ') '
-						   'SELECT gid'
-							   ',ST_Multi(ST_Union('
-							   'CASE '
-								   'WHEN ST_IsValid(the_geom) THEN the_geom '
-								   'ELSE ST_Buffer(the_geom,0) '
-							   'END)) AS the_geom '
-						   'FROM cte_dump '
-						   'GROUP BY gid'
 					   ') '
 					   'SELECT d.gid'
 						   ',d.hab_type'
@@ -281,7 +246,7 @@ BEGIN
 						   ',d.confidence_ab_ss_num'
 						   ',ST_CollectionExtract(r.the_geom, 3) '
 					   'FROM cte_diff d '
-						   'JOIN cte_repair r ON d.gid = r.gid', 
+					   'WHERE NOT ST_IsEmpty(d.the_geom)',
 					   habitat_sensitivity_final_table, habitat_sensitivity_schema, 
 					   habitat_sensitivity_table, species_sensitivity_all_areas_table);
 
@@ -308,7 +273,7 @@ BEGIN
 
 		RAISE INFO 'bh3_sensitivity_map: Populating table %.%', output_schema, output_table;
 
-		/* sensitivity map = habitat_sensitivity_final + species_sensitivity_max + species_sensitivity_mode_final */
+		/* sensitivity map = habitat_sensitivity_final + species_sensitivity_max + species_sensitivity_mode_final (union) */
 		EXECUTE format('WITH cte_union AS '
 					   '('
 						   'SELECT gid'

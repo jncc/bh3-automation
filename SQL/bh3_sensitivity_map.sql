@@ -115,7 +115,7 @@ BEGIN
 						   ',d.confidence_ab_ss_num'
 						   ',d.sensitivity_ab_su_num'
 						   ',d.sensitivity_ab_ss_num'
-						   ',ST_CollectionExtract(r.the_geom, 3) '
+						   ',d.the_geom '
 					   'FROM cte_diff d '
 					   'WHERE NOT ST_IsEmpty(d.the_geom)',
 					   species_sensitivity_mode_final_table, species_sensitivity_schema, 
@@ -244,7 +244,7 @@ BEGIN
 						   ',d.confidence_ab_su_num'
 						   ',d.sensitivity_ab_ss_num_max'
 						   ',d.confidence_ab_ss_num'
-						   ',ST_CollectionExtract(r.the_geom, 3) '
+						   ',d.the_geom '
 					   'FROM cte_diff d '
 					   'WHERE NOT ST_IsEmpty(d.the_geom)',
 					   habitat_sensitivity_final_table, habitat_sensitivity_schema, 
